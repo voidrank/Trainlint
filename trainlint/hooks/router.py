@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""finaltrain router — the orchestrator.
+"""trainlint router — the orchestrator.
 
 Pipeline:  stage1 prefilter (drop?) -> stage3 deterministic checks
                                      -> stage2 classifier (model or regex)

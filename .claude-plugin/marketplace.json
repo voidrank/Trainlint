@@ -1,10 +1,10 @@
 {
-  "name": "finaltrain",
+  "name": "trainlint",
   "owner": { "name": "shiyil", "email": "voidrank@gmail.com" },
   "plugins": [
     {
-      "name": "finaltrain",
-      "source": "./finaltrain",
+      "name": "trainlint",
+      "source": "./trainlint",
       "description": "Soft guardrail harness for AR-LLM multimodal training: injects the right discipline into vague requests at the right moment. Never blocks."
     }
   ]

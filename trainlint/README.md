@@ -1,4 +1,4 @@
-# finaltrain
+# trainlint
 
 A **soft guardrail harness** for AR-LLM multimodal training, packaged as a Claude Code plugin.
 
@@ -47,7 +47,7 @@ prefilter (structural, default-open: drop reads/docs/self-edits)
 ## Structure
 
 ```
-finaltrain/
+trainlint/
 ├── DESIGN.md  README.md
 ├── triggers.jsonl         coach rules (§1 portable core / §2 templated principles)
 ├── project.mimo.json      this project's facts (swap to port)
@@ -71,12 +71,12 @@ finaltrain/
 
 **A — settings.json (single machine):** point `UserPromptSubmit` and
 `PreToolUse` (matcher `Bash|Edit|Write|SendUserFile`) hooks at
-`/ABS/PATH/finaltrain/hooks/router.py`.
+`/ABS/PATH/trainlint/hooks/router.py`.
 
 **B — plugin:** this dir sits in a marketplace (see `../.claude-plugin/marketplace.json`):
 ```
 /plugin marketplace add /path/to/marketplace-root
-/plugin install finaltrain@finaltrain
+/plugin install trainlint@trainlint
 /reload-plugins
 ```
 > Using A and B together double-injects — remove the settings.json hooks after installing the plugin.

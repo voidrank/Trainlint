@@ -5,7 +5,7 @@
 {"desc": "read is dropped", "event": {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/x/model.py"}}, "expect_channel": "none"}
 {"desc": "readonly bash dropped", "event": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls -la /models/pretrained"}}, "expect_channel": "none"}
 {"desc": "doc edit dropped", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/NOTES.md", "content": "train the model"}}, "expect_channel": "none"}
-{"desc": "self-edit dropped", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/home/shiyil/FinalTrain/finaltrain/triggers.jsonl"}}, "expect_channel": "none"}
+{"desc": "self-edit dropped", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/home/shiyil/Trainlint/trainlint/triggers.jsonl"}}, "expect_channel": "none"}
 {"desc": "harmless greeting dropped-ish", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "你好"}, "expect_channel": "none"}
 #
 # --- stage 2 coach (silent steer) ---
