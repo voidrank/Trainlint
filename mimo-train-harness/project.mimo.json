@@ -1,0 +1,35 @@
+{
+  "_comment": "PROJECT FACTS for MiMo. The portable rules reference these via {{name}}. To port the harness to another project, copy this file to project.<name>.json, fill in the same keys with that project's facts, and put <name> in .active-project (or env HARNESS_PROJECT). The rules never change; only this file does.",
+
+  "reference_impl": "MiMo-Audio-Training base",
+  "frozen_component": "MiMo audio tokenizer",
+  "good_storage": "/mnt/minio(全闪存)",
+  "bad_storage": "JFS/NAS",
+
+  "launch_re": "sbatch|torchrun|deepspeed |accelerate launch|python\\S*\\s[^|;&]*train",
+  "bad_storage_re": "/jfs/|/nas/",
+  "data_file_ext_re": "jsonl|json|npy|wav|tar|arrow|bin",
+  "locked_configs_re": "deepspeed.*\\.json|ds_config|zero[0-3].*\\.json|tokenizer_config\\.json|preprocessor_config\\.json|generation_config\\.json",
+
+  "preproc_trap_re": "MelSpectrogram\\(|mel_spectrogram\\(|MelScale\\(|melscale",
+  "preproc_ok_re": "power\\s*=\\s*1\\.0",
+  "preproc_example": "torchaudio mel 的 power 漏写→默认 2.0→OOD 谱→1.79× 更差,正确是 power=1.0",
+
+  "pad_ood_re": "(audio|wav|sil\\w*|gap|pad)\\w*\\s*=\\s*np\\.zeros|np\\.zeros\\([^)]*\\)[^\\n]{0,40}(audio|wav|silence)",
+  "pad_ood_example": "纯零编成 OOD 码 351(占 ~40% 训练目标),自然安静才是 43;该用 -50dB 噪声",
+
+  "project_forward_re": "speech_mask|is_speech|role_emb|hidden_states_downcast|_local_forward",
+  "forward_example": "speech_mask 全位、top_p 被 ban_silence 旁路、is_speech 清掉自反馈",
+
+  "target_dist_traps": "empty_loss_weight / speech_loss_weights / text_gt-vs-text",
+  "config_override_example": "DeepSpeed 的 WarmupDecayLR 静默盖掉 sbatch 的 --lr_scheduler_type cosine",
+  "regime_example": "LoRA 的 2e-5 搬到 full-FT backbone 会过拟合",
+  "poison_example": "文本头被 echo loss 毒过、音色被全量 FT 洗过,都不可逆",
+  "demo_param": "enc_power(2.0/1.0 要和 ckpt 训练时对上)",
+  "code_align_example": "MiMoSampler 第二参是 ban-list 不是 keep-list;手动 KV-cache 别传 is_causal=True(Qwen2 hidden norm 翻倍)",
+  "codec_quirks": "①码是 context-dependent(有前文语音=43,纯零=351)②确认 encoder 因果性(双向→未来泄漏→流式崩)③LM 控制 token(1024/128)≠ codec 能 decode 的码 ④多码本联合精度指数衰减,单码本 top-1 要 ≥70%",
+
+  "eval_region_example": "audio-reads-text 看着 62%,拆出真 speech 区只有 12%(那 62% 是 351-repeat 静音的平凡分)",
+  "eval_crutch_example": "onset_floor 强制起说、强喂 text 行、blank 掉历史",
+  "eval_deploy_example": "双向 encoder 全窗口编码→timing 虚高;offline 丢 text turn 的连续音频 ≠ 真双工"
+}

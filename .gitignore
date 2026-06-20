@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+# runtime opt-in toggles / local state
+.active-project
+.quiz-gate
+project.demo.json

@@ -1,0 +1,28 @@
+# Coach-level rules (soft reminders). Two sections:
+#   SECTION 1 = PORTABLE CORE — process/diagnostic discipline, NO project facts.
+#               Moves to any project unchanged. This is the transferable core.
+#   SECTION 2 = PROJECT PRINCIPLES — a general principle + {{facts}} pulled from
+#               project.<name>.json. To port: change the facts, not these rules.
+# fields: name | when (regex) | inject | on?  (# comments / blank lines ignored)
+#
+# ===================== SECTION 1: PORTABLE CORE (no facts) =====================
+{"name": "debug-method", "when": "为什么|机械音|不对劲?|坏了|没用|还有问题|还不行|debug|诊断|排查|garbage|乱码|杂音", "inject": "〔harness·先别猜〕这类 bug 多半是静默的(loss 照降、train/infer 一致地错、\"能跑只是差\")。①默认\"效果差=有静默 bug\"而非欠训 ②把现象钉到某一层(数据/编码 · 解码渲染 · 生成采样 · 训练)③过模型复现 ④根因落到\"diff reference 的具体行\"或\"probe 数字\",ablation 是测量不是叙事,别讲故事。"}
+{"name": "diagnose-rigor", "when": "为什么|为何|找原因|定位|排查|root.?cause|挂了|崩了?|hang|卡死|illegal|OOM|NaN|对比.{0,4}实验|ablation|bisect", "inject": "〔harness·诊断纪律〕①别串行猜——一次设计 ≥2 个**可证伪探针**并行跑,用结果排除(串行猜过 4h,bisection 20min)②一个现象有多个变量(盘类型/长度/dtype/并行)时**一次只动一个**,点名混淆项 ③别凭 2-3 个点下\"任何 X>Y 都崩\"的边界,要 bisection 表。"}
+{"name": "data-sanity-first", "when": "illegal.?mem|CUDA.?error|backward.*(崩|错|fail)|errno|FileNotFound|读坏|corrupt|NaN|Inf", "inject": "〔harness·先验数据再猜算法〕崩在 IO/NCCL/OOM/NaN 附近时,先抽 10 个文件 load+查 NaN/幅度/存在性,**确认输入干净后**再上 bf16/attention 数值假设。真因常是文件读坏,不是序列长度/数值不稳。"}
+{"name": "repro-at-scale", "when": "修好了|fixed|搞定|解决了|跑通了|应该.{0,3}(好|行|没问题)|work了|没问题了", "inject": "〔harness·原始规模复现再下结论〕1-step / 短跑成功 ≠ 修好了。原始失败发生在 N step,就跑 ≥N step / 原始规模再宣布。"}
+{"name": "code-not-plan", "when": "架构|怎么实现|工作原理|interleave|讲一下.{0,8}(逻辑|实现|架构|思路)|how.{0,6}(does|work)|design.{0,6}(思路|是)", "inject": "〔harness·讲现状不讲理想〕解释架构先说\"代码**现在**怎么做(file:line + 一条真实 trace)\",再说\"计划怎么做\";现状与计划有 gap 必须显式标出。"}
+{"name": "spot-check-output", "when": "跑完|完成了|finished|生成好了|处理完|job.{0,6}(done|完成)|done\\b", "inject": "〔harness·抽查产物别只看行数〕数据/处理 job 跑完,别只看 exit-code + 行数。随机抽 5-10 条产物验 schema/NaN/格式/字段,再进下一阶段——坏数据会静默毒化下游训练。"}
+#
+# ================ SECTION 2: PROJECT PRINCIPLES (general + {{facts}}) ===========
+{"name": "train-data", "when": "sbatch|torchrun|run_?train|train\\.(py|sh)|训练|开训|重新?\\s*train|train\\s*吧|去\\s*train|跑.{0,4}(训|模型|实验|run)|launch.{0,10}train", "inject": "〔harness·训前验 target 分布〕烧 GPU 前在 CPU dump 一条真样本看 target:①no-op/padding 不是无害零,frozen tokenizer 会编成 OOD 并变成训练目标(查 %OOD)②按\"想要的推理分布\"配 loss 权重,某类占多数时算每类有效梯度占比 ③训练字段确认是干净源。本项目易踩:{{target_dist_traps}}。"}
+{"name": "train-infra", "when": "sbatch|torchrun|run_?train|train\\.(py|sh)|训练|开训|重新?\\s*train|train\\s*吧|去\\s*train|跑.{0,4}(训|模型|实验|run)|launch.{0,10}train|多节点|multi.?node|deepspeed|ds_config", "inject": "〔harness·训练基础设施(通用原理)〕①训练读必须在快可靠存储({{good_storage}}),网络/惰性 FS 并发下会读坏→崩;多节点预拷 /dev/shm 并校验文件数 ②多源配置会静默互相覆盖,打印**实际生效**值({{config_override_example}})③超参不能跨 regime 照搬({{regime_example}})④ZeRO 下自定义 sidecar save 先 .detach().clone().contiguous()。"}
+{"name": "shm-stale-cache", "when": "stage_codes|/dev/shm|--nnodes\\s*=?\\s*[2-9]|ntasks-per-node|多节点.*(暂存|stage)|追加.*(数据|codes)", "inject": "〔harness·暂存缓存别用旧的〕给已暂存到 /dev/shm 的数据追加内容后,旧节点会用过期快照 → FileNotFoundError → 一个 rank 死 → 多卡 NCCL 挂。暂存要**比对源 vs 目标文件数**,不匹配就 FORCE_RESTAGE。"}
+{"name": "fresh-ckpt", "when": "续训|resume|warm.?start|断点续|接着.{0,6}(训|练|ckpt|checkpoint)|从.{0,8}(ckpt|checkpoint).{0,6}(训|练|续|接)|继续训练|continue.{0,6}train", "inject": "〔harness·别续训〕错目标/错 loss 训出的 ckpt 是中毒的({{poison_example}})。永远从干净 {{reference_impl}} 重训,靠 数据/loss/超参 修因,别从坏 ckpt 接着练。"}
+{"name": "demo-discipline", "when": "demo|效果|发我|发你|听.{0,2}听|render|生成.{0,4}音频|\\.wav|感觉.{0,4}(烂|差|怪|好|更)|好像.{0,4}(烂|差|更|不对)|sounds|变差", "inject": "〔harness·demo/eval 铁律〕①必须端到端过模型(generate),禁止把 GT 的 codec 往返 / 任何 proxy 当 demo;发前先指认\"哪一行调了 model.generate\" ②每个 demo 标:ckpt-id + 含哪些 fix + 关键预处理参({{demo_param}})③不准追\"感觉更烂了\"这种主观抱怨去改配置,先要/产出 具体 sample+ckpt 对比 ④客观指标只缩小范围,感知最终要人耳。"}
+{"name": "code-align", "when": "\\bloss\\b|权重|weight|speech_mask|\\bmask\\b|ar.?shift|采样|sampler|温度|temperature|kv.?cache|is_causal|duplex/(model|dataset|inference)|modeling_mimo|speech_dataset", "inject": "〔harness·自定义=偏离 reference〕改 train 代码默认你改错了:①对着 {{reference_impl}} 逐行 diff,每处分歧登记原因 ②AR off-by-one:loss 必须 logits[:,:-1] vs labels[:,1:],别 echo 输入 ③影响 forward 的 flag train/infer 两端必须一致并写进 config。本项目易踩:{{code_align_example}}。"}
+{"name": "codec", "when": "encode|编码|mel|tokenizer|codec|codebook|码本|silence|静音|量化|\\bvq\\b|power=|re-?encode|重新.{0,4}编码", "inject": "〔harness·frozen 组件的脾气〕frozen tokenizer/codec 是黑盒:①预处理参必须逐位对齐它训练 config,别信库默认 ②no-op 区是 OOD,查它编成啥 ③{{codec_quirks}} ④弱模态会学捷径忽略强条件,用 ablation 量化再上反捷径。"}
+# --- eval VALIDITY (how to read eval results; general to any model eval) ---
+{"name": "eval-metric-by-region", "when": "ablation|accuracy|top-?1|准确率|\\bmetric\\b|指标|评测|\\beval\\b", "inject": "〔harness·eval·别被聚合数骗〕一个聚合 metric 可能被**平凡多数类**(静音/empty/padding)主导。必须按区间拆:speech vs silence、answer vs pre-answer。我们踩过:{{eval_region_example}}。"}
+{"name": "eval-free-not-tf", "when": "teacher.?forc|tf.?acc|准确率|free.?run|自由生成|teacher 强制|强制解码", "inject": "〔harness·eval·别信 teacher-forced〕TF 的 per-cb 准确率会**高估**(历史永远是 GT,续写下一帧很容易)。真正的考试是 free-running 自回归生成(一个采样错就崩)。TF 高 + 自由生成垃圾 = 典型 shortcut。"}
+{"name": "eval-no-crutch", "when": "onset.?floor|force.?text|forced.?text|blank.*history|crutch|强制.*(起说|文本)|inject.?text|拐杖", "inject": "〔harness·eval·别拄拐杖〕好成绩若依赖部署时没有的帮助({{eval_crutch_example}}),那不是真成绩。eval 的条件必须 = 部署的条件;拄拐的数字要明确标注'仅此条件成立'。"}
+{"name": "eval-as-deployment", "when": "offline.*render|streamA_offline|full.?window|streaming|流式|encode_refresh|encode_chunked|离线.*渲染", "inject": "〔harness·eval=部署条件〕offline render / 全窗口 encode 测的是和流式部署**不同的场景**({{eval_deploy_example}})。在部署一致的条件下 eval,或双轨对比并标注差异。"}

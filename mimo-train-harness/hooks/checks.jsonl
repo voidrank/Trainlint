@@ -1,0 +1,17 @@
+# Deterministic FATAL-item checks (stage 3). Never use a model.
+# Each is a GENERAL PRINCIPLE; project-specific strings come from project.<name>.json
+# via {{placeholders}} (expanded by facts.py). To port: change the facts, not these rules.
+# fields: name | tool (regex) | inspect (path|content|command|any) | match | unless? | level | message
+# level: "reject" = machine-certain violation -> bounce back silently
+#        "escalate" = only-human-can-verify the actual code -> stop and ask the user
+#
+# --- reject (machine-certain, silent bounce) ---
+{"name": "train-read-on-fast-storage", "tool": "Bash", "inspect": "command", "level": "reject", "match": "({{launch_re}})[\\s\\S]*({{bad_storage_re}})|--(data|codes|manifest)[_-]?(root|dir|path)[ =]\\S*({{bad_storage_re}})", "message": "训练/数据路径在不可靠存储({{bad_storage}})——并发读会中途读坏 → backward 崩。改用 {{good_storage}} 再起。(只读查看 jfs 不算,这条只在训练启动时拦)"}
+{"name": "no-edit-locked-config", "tool": "Edit|Write", "inspect": "path", "level": "reject", "match": "{{locked_configs_re}}", "message": "这是锁定的 base/infra 配置。别直接改——静默覆盖正是 scheduler-override / power-mel 那类坑的来源。退回去:用显式 CLI flag 或单独的 override 文件,并说明原因。"}
+#
+# --- escalate (only a human reading the actual code can confirm) ---
+{"name": "forward-change-needs-human", "tool": "Edit|Write|MultiEdit", "inspect": "content", "level": "escalate", "match": "attention_mask|is_causal|causal_mask|attn_mask|\\bsoftmax\\(|\\btop_p\\b|\\btop_k\\b|sampler|def generate|{{project_forward_re}}", "message": "这段改动碰了 forward / mask / 采样 / generate 逻辑——自然语言推理靠不住,只有看 code 才准,错了是静默灾难(本项目踩过:{{forward_example}})。请用户核对这段 diff。"}
+{"name": "preproc-matches-frozen-config", "tool": "Edit|Write|MultiEdit", "inspect": "content", "level": "escalate", "verifier": "check_mel_power.mel_power", "message": "改了喂给 {{frozen_component}} 的 mel 预处理,但没对齐它训练时的 config——别信库默认({{preproc_example}})。请用户确认。"}
+{"name": "ar-shift-present", "tool": "Edit|Write|MultiEdit", "inspect": "content", "level": "escalate", "match": "text_loss|cross_entropy.*labels|F\\.cross_entropy", "unless": "\\[:,\\s*:-1\\]|\\[:,\\s*1:\\]|shift_logits|shift_labels", "message": "改了 loss 但没看到 AR off-by-one 的切片(logits[:,:-1] vs labels[:,1:])。echo-collapse(我我我…/分分分…)就是这么来的。请用户确认 shift 还在。"}
+{"name": "padding-encodes-OOD", "tool": "Edit|Write|MultiEdit", "inspect": "content", "level": "escalate", "match": "{{pad_ood_re}}", "message": "用 np.zeros 填音频静音/间隙——frozen tokenizer 没见过纯零,会编成 OOD 码({{pad_ood_example}})。请用户确认。"}
+{"name": "silent-truncation", "tool": "Edit|Write|MultiEdit", "inspect": "content", "level": "escalate", "match": "keep\\s*=\\s*min\\(|\\[\\s*[\\w]+\\s*-\\s*keep\\s*:\\s*\\]|\\[-\\s*keep\\s*:\\]", "message": "看到右对齐截断(只留尾部 keep 个 token)——长序列会丢**头部**(我们这里 250 字只留 79,问题上下文全丢)。请用户确认截断方向 + 是否该 log 截断率。"}
