@@ -69,6 +69,32 @@ don't change.
 
 ![an example search tree](docs/search-tree.png)
 
+## Why it's designed this way
+
+- **A linter, not a gate.** Research is non-monotonic — a plateau often comes right before a
+  breakthrough — so Trainlint *hints*; it never prunes your search or restricts the agent's
+  exploration. It corrects the biases of unsupervised work (sunk cost, cargo-cult, blaming
+  the data) with **information, not control**. The judgment stays yours.
+- **It can never lock you out.** When it does block a machine-certain mistake, it does so with
+  a *permission decision*, never by crashing — a bug in the guard must always be safer than
+  the bug it guards against. Fail-open by construction.
+- **Route each call to whoever can actually judge it.** Machine-checkable → bounced silently
+  (you're undisturbed); only-a-human-can-verify (a forward/mask change) → escalated to you;
+  everything else → a quiet nudge to the agent. A model may *route*, but it never judges
+  correctness — that's for deterministic checks, or for you.
+- **The knowledge is the principle; the project is just the scar.** Every rule is a law that
+  survives a project change; the specifics (paths, calls, numbers) live in one swappable facts
+  file. A wrong default isn't a rule — it's an *instance* of "match the frozen component's config."
+- **Catching single mistakes isn't enough — you also go in circles.** A second layer
+  reconstructs your search tree from the traces you already leave, flags when you've over-tuned
+  one branch, and surfaces the paper that explains the wall *you just hit*. It only ever hints.
+- **Nothing to maintain, nothing to lose.** The tree is rebuilt from traces every run; the
+  irreplaceable "why we abandoned X" is harvested into git before a session compacts. Anchored
+  to your work — never to a session, which may never end.
+
+The full rationale (the scars each rule came from) is in
+[DESIGN.md](trainlint/DESIGN.md) — read it before adding rules.
+
 ## Install
 
 ```
