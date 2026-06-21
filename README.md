@@ -16,14 +16,8 @@ See [`trainlint/README.md`](trainlint/README.md) for usage and
 
 ## Install
 
-```
-/plugin marketplace add /path/to/this/dir
-/plugin install trainlint@trainlint
-/reload-plugins
-```
-
-Or for a single machine without the plugin system, point `~/.claude/settings.json`
-hooks at `trainlint/hooks/router.py` (see the plugin README).
+See **[INSTALL.md](INSTALL.md)** — Form A (settings.json hooks, single machine) or
+Form B (plugin via marketplace), plus verification and how to port to another project.
 
 ## Test
 

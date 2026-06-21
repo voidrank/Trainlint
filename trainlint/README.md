@@ -69,22 +69,9 @@ trainlint/
 
 ## Install
 
-**A — settings.json (single machine):** point `UserPromptSubmit` and
-`PreToolUse` (matcher `Bash|Edit|Write|SendUserFile`) hooks at
-`/ABS/PATH/trainlint/hooks/router.py`.
-
-**B — plugin:** this dir sits in a marketplace (see `../.claude-plugin/marketplace.json`):
-```
-/plugin marketplace add /path/to/marketplace-root
-/plugin install trainlint@trainlint
-/reload-plugins
-```
-> Using A and B together double-injects — remove the settings.json hooks after installing the plugin.
-
-## Opt-in knobs (default off)
-
-- `HARNESS_MODEL=1` (+ `ANTHROPIC_API_KEY`) — small-model semantic recall booster (Haiku selector over the vetted catalog; never invents advice).
-- `HARNESS_QUIZ=1` or a `.quiz-gate` file — surface a relevant knowledge question at high-stakes moments (never blocks).
+See **[../INSTALL.md](../INSTALL.md)** — Form A (settings.json hooks) or Form B
+(plugin), the research-layer hooks, verification, opt-in knobs
+(`HARNESS_MODEL` / `HARNESS_QUIZ`), and how to port to another project.
 
 ## Test
 
