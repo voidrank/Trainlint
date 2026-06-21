@@ -82,9 +82,24 @@ def harvest(path, name="mimo"):
     return len(new)
 
 
+def _main():
+    """CLI:  harvest.py <transcript.jsonl> [project]
+    Hook (PreCompact/SessionEnd): reads {transcript_path} from stdin JSON.
+    Always exits 0, writes nothing on error — must never break the session."""
+    import os
+    try:
+        if len(sys.argv) >= 2 and not sys.argv[1].startswith("-"):
+            path = sys.argv[1]
+            name = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("HARNESS_PROJECT", "mimo")
+        else:
+            path = (json.load(sys.stdin) or {}).get("transcript_path", "")
+            name = os.environ.get("HARNESS_PROJECT", "") or "mimo"
+        if path:
+            print(f"harvested {harvest(path, name)} new annotation(s)")
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("usage: harvest.py <transcript.jsonl> [project]")
-        sys.exit(2)
-    n = harvest(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "mimo")
-    print(f"harvested {n} new annotation(s)")
+    _main()
+    sys.exit(0)

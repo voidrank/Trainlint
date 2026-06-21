@@ -28,4 +28,10 @@ def run(name=None):
 
 
 if __name__ == "__main__":
-    print(run(sys.argv[1] if len(sys.argv) > 1 else None))
+    # Safe for use as a SessionStart hook: any error → print nothing, exit 0.
+    try:
+        arg = sys.argv[1] if (len(sys.argv) > 1 and not sys.argv[1].startswith("-")) else None
+        print(run(arg))
+    except Exception:
+        pass
+    sys.exit(0)
