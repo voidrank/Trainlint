@@ -1,10 +1,31 @@
 ---
-description: Build the project PLAN in the foreground — establish the full project context, decompose into decisions (written as you go), then quiz you on each
-argument-hint: "[review | status | <free-text context>]"
+description: Build the project PLAN in the foreground — establish the full project context, decompose into decisions (written as you go), then quiz you on each. Or reconstruct it from a past session log.
+argument-hint: "[review | status | from-log [session-id|path] | <free-text context>]"
 ---
 The PLAN is the project's floor plan: an ordered list of DECISIONS (one JSONL line each in
 `${CLAUDE_PLUGIN_ROOT}/research/plan.<active-project>.jsonl`), every one tagged with the
 transferable PRINCIPLE that governs it. Active project = `${CLAUDE_PLUGIN_ROOT}/.active-project`.
+
+## `from-log` — reconstruct the plan from a past session transcript (recovery)
+
+The plan is **cheap and reconstructable** — a session that already worked it out contains every
+decision. If the plan file is gone (e.g. a plugin update started a fresh cache) or you want to
+rebuild it from a session, run `from-log`:
+
+1. **Find the transcript.** Session logs are JSONL at `~/.claude/projects/<project-dir>/<id>.jsonl`.
+   `$ARGUMENTS` after `from-log` may be a session id, a full path, or a hint ("the megafish session")
+   — resolve it (newest matching log if a hint). The file can be huge: **grep/stream it, never read
+   it whole** (or hand it to a subagent).
+2. **Extract what the session ESTABLISHED**, not every passing remark: the GOAL (name the pillars in
+   it), each DECISION with its `choice`/`status`, the `principle` governing it, the `load_bearing`
+   one, the 2-4 `pillar`s, any anti-prior rejections (`not_this`/`not_re`), and defined terms (for
+   the glossary). The log is the source of truth for what was decided — you don't need to re-read all
+   the code, only fill gaps the log left `open`/UNKNOWN.
+3. **Write** `research/plan.<name>.jsonl` (+ `goal.<name>.txt`, `glossary.<name>.jsonl`, and fill the
+   facts files) in the normal schema. Show me the reconstruction to correct, then quiz me on it.
+
+(Mastery/progress is the one thing a log can't restore — it's accumulated, not stated. That's fine;
+re-walking the quiz rebuilds it.)
 
 **Do this in the FOREGROUND — you are the protagonist, not a relayer.** Planning is interactive and
 creative: you read the code, you reason it out, the user corrects you, you quiz them. Own that
