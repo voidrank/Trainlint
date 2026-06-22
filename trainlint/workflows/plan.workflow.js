@@ -9,8 +9,25 @@ export const meta = {
 }
 
 // args: { project: "<name>", pluginRoot: "/abs/path/to/plugin/root" }
-const project = (args && args.project) || 'project'
-const root = (args && args.pluginRoot) || '.'
+// Guard against the known footgun: if the launcher didn't pass args, DON'T silently default and
+// plan the wrong project — resolve them with one agent (the script itself has no filesystem access).
+let project = args && args.project
+let root = args && args.pluginRoot
+if (!project || !root) {
+  log('args missing (project/pluginRoot) — resolving from the filesystem before planning anything')
+  const r = await agent(
+    'Find the trainlint plugin and its active project. ' +
+    '(1) pluginRoot = the absolute path of the directory that contains `.active-project`, ' +
+    '`project.<name>.json`, and the `research/` + `workflows/` folders (look under ' +
+    '~/.claude/plugins/cache/trainlint/*/ and any Trainlint checkout). ' +
+    '(2) project = the exact name inside that `.active-project` file. Return both.',
+    { label: 'resolve-args', schema: { type: 'object', additionalProperties: false,
+      properties: { project: { type: 'string' }, pluginRoot: { type: 'string' } },
+      required: ['project', 'pluginRoot'] } }
+  )
+  project = project || (r && r.project)
+  root = root || (r && r.pluginRoot)
+}
 const planFile = `${root}/research/plan.${project}.jsonl`
 const actionFile = `${root}/project.${project}.json`
 const researchFile = `${root}/research/facts.${project}.json`

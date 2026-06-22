@@ -1,7 +1,7 @@
 {
   "name": "trainlint",
   "description": "Soft guardrail harness for AR-LLM multimodal training. A doorman between you and the coding agent: silent / coach / escalate / reject. Never locks the session.",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "keywords": ["hooks", "training", "multimodal", "guardrail", "ar-llm"],
   "author": { "name": "shiyil", "email": "voidrank@gmail.com" }
 }

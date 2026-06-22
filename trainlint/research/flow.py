@@ -78,7 +78,17 @@ def context_briefing(name, nodes):
         tail = f" — next decision: {nxt[0]['decision']}" if nxt else ""
         parts.append(plan.brief(name) + tail)
     else:
-        parts.append("no plan yet — draft the project's decisions with `/trainlint:plan`")
+        # backstop: a registered project (init ran -> facts/project files exist) with an empty plan
+        # means the plan was "started but never written". Flag it prominently — deterministic, every
+        # session start, so a derailed foreground draft can't be silently dropped.
+        registered = ((HERE.parent / f"project.{name}.json").exists()
+                      or (HERE / f"facts.{name}.json").exists())
+        if registered:
+            parts.append("⚠️ this project is registered but its PLAN is NOT written yet (started but "
+                         "never landed?) — run `/trainlint:plan` to draft the decisions. Don't leave "
+                         "it unwritten; a plan on disk is what the quiz + doorman build on.")
+        else:
+            parts.append("no plan yet — draft the project's decisions with `/trainlint:plan`")
     b = lint.brief(name)
     parts.append(f"search tree: {len(nodes)} directions"
                  + (f"; {b}" if b else "; no stalled branches / ready papers right now"))
