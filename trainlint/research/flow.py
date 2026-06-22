@@ -20,9 +20,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import tree   # noqa: E402
-import lint   # noqa: E402  (lint.brief)
-import plan   # noqa: E402  (plan.brief — the project's decision floor-plan)
+import tree      # noqa: E402
+import lint      # noqa: E402  (lint.brief)
+import plan      # noqa: E402  (plan.brief — the project's decision floor-plan)
+import progress  # noqa: E402  (plan-quiz mastery/coverage state)
 
 STATE = HERE / ".state"
 
@@ -81,12 +82,15 @@ def _viz_directive():
             "(on mobile it lands as a zoomable image).")
 
 
-def _quiz_directive():
-    return ("[trainlint:quiz] project kickoff — administer ONE soft quiz now (don't block my work): "
-            f"read {HERE.parent / 'quiz.jsonl'}, ask a random L2/L3 question (show context+q only), grade "
-            "my answer against the PRINCIPLE, then reveal why+a. If I miss it, GENERATE 3 more questions "
-            "on that same principle and let me choose which to answer — keep drilling until I've got it. "
-            "'skip' always ends it.")
+def _quiz_directive(n):
+    return (f"[trainlint:quiz] {n} plan decision(s) are new / changed / not-yet-mastered since you "
+            "last walked them — run `/trainlint:quiz` to be drilled on JUST those (it skips the ones "
+            "you've already mastered). Each is posed as its governing principle, graded, and the "
+            "misses drilled with fresh scars. Soft — 'skip' exits, never blocks my work.")
+
+
+def _quiz_fp(targets):
+    return hashlib.md5((";".join(sorted(n.get("id", "") for n in targets))).encode()).hexdigest()
 
 
 def main():
@@ -113,10 +117,18 @@ def main():
             _write(STATE / f"{name}.treefp", fp)
             if prev and nodes:
                 out.append(_viz_directive())
-        # (3) quiz kickoff, once per project
-        if not (STATE / f"{name}.quizzed").exists():
-            _write(STATE / f"{name}.quizzed", "1")
-            out.append(_quiz_directive())
+        # (3) plan-quiz nudge — fires whenever the set of new/changed/unmastered plan
+        # decisions changes (i.e. after any plan edit), and ONLY over those decisions.
+        try:
+            pl = plan.load(name)
+            tg = progress.targets(pl, name=name) if pl else []
+        except Exception:
+            tg = []
+        if tg:
+            qfp = _quiz_fp(tg)
+            if qfp != _read(STATE / f"{name}.quizfp"):
+                _write(STATE / f"{name}.quizfp", qfp)
+                out.append(_quiz_directive(len(tg)))
         _emit("\n".join(out), event)
 
     sys.exit(0)

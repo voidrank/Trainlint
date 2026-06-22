@@ -8,6 +8,7 @@ import tree
 import governor
 import surfacer
 import plan
+import progress
 
 
 def main():
@@ -59,7 +60,20 @@ def main():
     check(sum(s["counts"].values()) == len(pl) and plan.brief("mimo").startswith("plan:"),
           "plan.summary/brief account for every decision")
 
-    total = 14
+    # --- plan-quiz coverage: quiz after any plan change, only the new/changed/unmastered ---
+    prog0 = {}
+    check(len(progress.targets(pl, prog0)) == len(pl),
+          "with empty progress, EVERY decision is a quiz target")
+    d0 = pl[0]
+    prog1 = {d0["id"]: {"fp": progress.fingerprint(d0), "mastered": True}}
+    tg1 = progress.targets(pl, prog1)
+    check(len(tg1) == len(pl) - 1 and all(n["id"] != d0["id"] for n in tg1),
+          "a mastered + unchanged decision drops out of the target set")
+    edited = dict(d0); edited["choice"] = d0.get("choice", "") + " (revised)"
+    check(any(n["id"] == d0["id"] for n in progress.targets([edited], prog1)),
+          "editing a mastered decision (fingerprint change) re-opens it for quizzing")
+
+    total = 17
     print(f"\n{total - fails}/{total} passed")
     sys.exit(1 if fails else 0)
 

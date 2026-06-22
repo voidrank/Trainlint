@@ -36,3 +36,13 @@ ones explicitly — those are where a silent mistake still hides. Change nothing
 
 This is collaborative: propose, let me edit, then write. An unconfirmed decision stays `open` —
 do not promote it to `decided`/`verified` without my say-so. Keep it SOFT; never block my work.
+
+## After ANY plan change → enter quiz mode (on the changed decisions only)
+
+Once you've written/updated the plan, IMMEDIATELY continue into the plan-quiz — but only over the
+decisions that are **new, changed, or not-yet-mastered** (`progress.targets(plan)`; never re-drill
+a mastered+unchanged decision). Walk them exactly as `/trainlint:quiz` does: pose each decision's
+governing principle as a question, grade against the principle, drill the misses with fresh scars,
+and `progress.mark` the ones I get. If nothing is new/changed/unmastered, say so and stop. Soft
+throughout — "skip" exits.
+
