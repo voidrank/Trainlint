@@ -121,8 +121,10 @@ def _compass(name):
         # drifting back toward. Kept in front of the agent every turn so the prior can't win.
         bits.append("⛔ already rejected (don't drift back): "
                     + "; ".join(a["not_this"] for a in av if a.get("not_this")))
-    if not bits:
-        return ""
+    # standing grounding discipline — always on (this fires worst on unfamiliar code, where there
+    # may be no goal/thread yet): research truth is in the specific code, not your prior.
+    bits.append("🔎 ground every claim in file:line; if you don't know, write UNKNOWN and go READ — "
+                "don't narrate a plausible guess")
     return "[trainlint:compass] " + "  ·  ".join(bits)
 
 

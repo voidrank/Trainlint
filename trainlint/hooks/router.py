@@ -24,6 +24,7 @@ import prefilter      # noqa: E402
 import checks         # noqa: E402
 import classifier     # noqa: E402
 import planaware      # noqa: E402
+import readtrack      # noqa: E402
 
 _RANK = {"reject": 3, "escalate": 2, "coach": 1}
 
@@ -34,10 +35,12 @@ def _level(item):
 
 def decide(data):
     """Pure function: hook event dict -> output dict (or None for silent)."""
+    # record reads FIRST (before the prefilter drops them) so we know what the agent has looked at
+    readtrack.record(data)
     if prefilter.classify_action(data) == "drop":
         return None
 
-    items = checks.run(data) + classifier.classify(data)
+    items = checks.run(data) + classifier.classify(data) + readtrack.check(data)
 
     # plan-aware routing: locate this action on the project PLAN and route by the
     # touched decision's status + principle (open->escalate, decided/verified->coach),

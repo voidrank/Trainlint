@@ -27,7 +27,7 @@ moment it's written.**
 
 Every time the agent goes to do something — change a config, launch a run, touch the model
 code — it has to walk past one bouncer. The bouncer has seen runs blow up before. They size up
-the move and does one of four things:
+the move and do one of four things:
 
 🚫 **"Nope, not this one."** — They recognize a move that's *already* sunk a run before: a
 known-bad setting, the kind of silent misconfig that doesn't crash but quietly poisons the
@@ -42,7 +42,7 @@ week. So they hand you the diff: *you* look. Because here, your eyes are the onl
 works.
 
 👈 **"Psst — double-check that."** — Not sure, not fatal, just worth a word. They lean over and
-mutters it to the agent, who can fold it in or shrug it off. You never even hear it happen.
+mutter it to the agent, who can fold it in or shrug it off. You never even hear it happen.
 
 😶 **(says nothing)** — 99% of the time. Nothing's off, the door's open, the agent walks
 through.
@@ -161,7 +161,7 @@ From then on a **compass** stays lit every turn: your **goal**, the **main threa
 load-bearing open question that gates everything right now), and the **next action**. It keeps the
 agent — and you — on the thing that matters instead of polishing side-quests. Lose the goal and you
 wander; lose the thread and you scatter. The compass is how the work stays *motivated and focused*.
-The doorman uses the same plan: it knows which decision an edit touches, so it escalates the genuinely
+The bouncer uses the same plan: it knows which decision an edit touches, so it escalates the genuinely
 unresolved one and stays quiet on the settled ones — routing by the decision, not by keywords.
 
 ## There's a second layer: it maps where you've been
