@@ -26,22 +26,22 @@ moment it's written.**
 ## How it works — it's a bouncer at the door
 
 Every time the agent goes to do something — change a config, launch a run, touch the model
-code — it has to walk past one bouncer. The bouncer has seen runs blow up before. He sizes up
+code — it has to walk past one bouncer. The bouncer has seen runs blow up before. They size up
 the move and does one of four things:
 
-🚫 **"Nope, not this one."** — He recognizes a move that's *already* sunk a run before: a
+🚫 **"Nope, not this one."** — They recognize a move that's *already* sunk a run before: a
 known-bad setting, the kind of silent misconfig that doesn't crash but quietly poisons the
-output. He doesn't lecture, he doesn't ping you — he just turns it around at the door and says
+output. They don't lecture, they don't ping you — they just turn it around at the door and say
 *redo it*. A known disaster never makes it inside, and **your phone stays quiet**, because why
-would you need to rule on something he's already sure about?
+would you need to rule on something they're already sure about?
 
 🙋 **"Hey — you'll want to see this."** — This is the only move that taps *you* on the
 shoulder. Someone changed something no machine can check — a tweak to how the model trains or
 sees its input, where there's no test that says right or wrong, but if it *is* wrong it eats a
-week. So he hands you the diff: *you* look. Because here, your eyes are the only instrument that
+week. So they hand you the diff: *you* look. Because here, your eyes are the only instrument that
 works.
 
-👈 **"Psst — double-check that."** — Not sure, not fatal, just worth a word. He leans over and
+👈 **"Psst — double-check that."** — Not sure, not fatal, just worth a word. They lean over and
 mutters it to the agent, who can fold it in or shrug it off. You never even hear it happen.
 
 😶 **(says nothing)** — 99% of the time. Nothing's off, the door's open, the agent walks
@@ -49,15 +49,15 @@ through.
 
 The trick is what *doesn't* reach you. Not "everything suspicious" — only that one sliver where
 no machine can check it and no quiet word can fix it. **That's** why you don't end up muting
-him: he only ever bugs you when you're genuinely the last line of defense.
+them: they only ever bug you when you're genuinely the last line of defense.
 
-And two house rules keep him safe to leave on:
+And two house rules keep them safe to leave on:
 
-- **He bounces a move, never your direction.** Even a "nope" stops *one action* — your overall
-  approach is still yours. (A plateau is often right before the breakthrough; he won't prune
+- **They bounce a move, never your direction.** Even a "nope" stops *one action* — your overall
+  approach is still yours. (A plateau is often right before the breakthrough; they won't prune
   your search.)
-- **He can't ever lock you out.** He turns a bad move away with a polite "denied," never by
-  knocking the door off its hinges — a bug in the bouncer is always safer than the bug he's
+- **They can't ever lock you out.** They turn a bad move away with a polite "denied," never by
+  knocking the door off its hinges — a bug in the bouncer is always safer than the bug they're
   there to stop.
 
 ## What it catches — silent-wrong has only a few shapes

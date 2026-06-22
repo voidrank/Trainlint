@@ -53,6 +53,13 @@ Present this full picture to me FIRST and let me correct it.
    the progress already on disk survives — the plan is never "started but unwritten".
    Mark exactly ONE decision `"load_bearing": true` — the open decision that most gates the rest
    (the cheapest test that could invalidate the whole plan). That one becomes the **main thread**.
+   **Anti-prior:** if a decision REJECTS an option you (the agent) would otherwise keep drifting
+   toward — because your context is saturated with it (e.g. "build on megafish, NOT in the MiMo
+   codebase / NOT MiMo's codec"; "fresh-from-base, NOT resume a prior duplex ckpt") — pin it with
+   `"not_this": "<the rejected usage in plain words>"` and `"not_re": "<regex for an action drifting
+   toward it>"`. Make `not_re` match the rejected *usage*, NOT the legitimate reference (so "borrow
+   MiMo's recipe/data" must NOT trip it). The doorman then catches that drift on every action and the
+   compass keeps it in front of you every turn — so a strong prior can't quietly win back the decision.
 4. **While establishing context, also FILL the facts files** init left empty (you're the one reading
    the code): `project.<name>.json` (the doorman's danger patterns — bad_storage_re,
    locked_configs_re, preproc_trap_re/preproc_ok_re, frozen_component, the *_example fields; see

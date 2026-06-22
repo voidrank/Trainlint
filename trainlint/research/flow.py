@@ -110,11 +110,17 @@ def _compass(name):
     goal = _read(HERE / f"goal.{name}.txt")
     pl = plan.load(name)
     mt = plan.main_thread(pl) if pl else None
+    av = plan.avoided(pl) if pl else []
     bits = []
     if goal:
         bits.append("🎯 goal: " + goal)
     if mt:
         bits.append("main thread (drive this, don't wander): " + mt.get("decision", ""))
+    if av:
+        # the anti-prior reminder: the options the user already rejected that the agent keeps
+        # drifting back toward. Kept in front of the agent every turn so the prior can't win.
+        bits.append("⛔ already rejected (don't drift back): "
+                    + "; ".join(a["not_this"] for a in av if a.get("not_this")))
     if not bits:
         return ""
     return "[trainlint:compass] " + "  ·  ".join(bits)

@@ -124,6 +124,20 @@ def main_thread(plan=None, name=None):
     return unver[0] if unver else None
 
 
+def avoided(plan=None, name=None):
+    """The explicitly REJECTED options (anti-prior decisions) the agent must not drift back into.
+    A decision pins one with two fields:
+      not_this: human-readable rejected option (e.g. "use MiMo's codec/pipeline as the impl")
+      not_re:   regex that recognizes an action DRIFTING toward it (specific to the rejected
+                *usage*, not the legitimate reference — so 'borrow MiMo's recipe' doesn't trip it)
+    Used by the compass (ambient reminder) + the plan-aware doorman (action-level catch)."""
+    if plan is None:
+        plan = load(name)
+    return [{"id": n.get("id", ""), "not_this": n.get("not_this", ""),
+             "choice": n.get("choice", ""), "not_re": n.get("not_re", ""), "why": n.get("why", "")}
+            for n in plan if n.get("not_re") and n.get("not_this")]
+
+
 def brief(name=None):
     """One-line plan status, or '' if no plan exists for this project."""
     plan = load(name)

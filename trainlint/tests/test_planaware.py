@@ -70,5 +70,22 @@ check("user" in _surfaced(out).lower() or "confirm" in _surfaced(out).lower()
       or "mel" in _surfaced(out).lower(),
       "machine-certain mel-power verifier still escalates to the user (not downgraded)")
 
-print(f"\n{8 - fails}/8 passed")
+# 4. ANTI-PRIOR WATCH — drifting toward an explicitly rejected option is caught on ANY action,
+#    coach-level (agent-facing), and names the decision that rejected it.
+ev_drift = {"hook_event_name": "PreToolUse", "tool_name": "Bash",
+            "tool_input": {"command": "torchrun train.py --resume dup_d3v21s_nofreeze/latest"}}
+items, _ = planaware.assess(ev_drift)
+check(any("REJECTED" in i["message"] and i.get("plan_decision") == "ckpt-init" for i in items),
+      "anti-prior: resuming from a previous duplex ckpt is flagged (cites ckpt-init)")
+out = router.decide(ev_drift)
+check("REJECTED" in _ctx(out) and "Needs your check" not in _surfaced(out),
+      "anti-prior reaches the agent as a coach (not a user-facing escalation)")
+# a LEGITIMATE mention (borrowing the recipe / fresh-from-base) must NOT trip the watch
+ev_ok = {"hook_event_name": "PreToolUse", "tool_name": "Bash",
+         "tool_input": {"command": "torchrun train.py --init_from base --fresh"}}
+items_ok, _ = planaware.assess(ev_ok)
+check(not any("REJECTED" in i["message"] for i in items_ok),
+      "anti-prior does NOT fire on the legitimate fresh-from-base path (no false positive)")
+
+print(f"\n{11 - fails}/11 passed")
 sys.exit(1 if fails else 0)

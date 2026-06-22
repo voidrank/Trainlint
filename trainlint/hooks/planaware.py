@@ -19,6 +19,7 @@ escalations (the audit's "3 byte-identical, ignored" failure). A verified decisi
 also lets the router DOWNGRADE a keyword-only escalation (the region is settled) —
 see router.decide. Fail-OPEN: any error -> no items, never raises.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -79,10 +80,31 @@ def assess(data):
     if planlib is None:
         return [], []
     try:
-        located = planlib.locate(_haystack(data))
+        hay = _haystack(data)
+        full = planlib.load()
+        located = planlib.locate(hay, full)
     except Exception:
         return [], []
-    if not located:
+    items = []
+    # ANTI-PRIOR WATCH — catch the agent drifting toward an explicitly REJECTED option, on ANY
+    # action (not just ones that touch the decision's topic). NOT deduped: it fires every time the
+    # agent drifts, because the whole job is to keep correcting a strong prior the user already
+    # rejected ("use megafish, not MiMo's codec" / "fresh-from-base, not resume a duplex ckpt").
+    # Coach-level — agent-facing, never blocks (the user already said it; the AGENT needs reminding).
+    for d in full:
+        nr = d.get("not_re")
+        if not nr or not hay:
+            continue
+        try:
+            if re.search(nr, hay, re.IGNORECASE):
+                items.append({"level": "coach", "plan_decision": d.get("id", "?"),
+                              "message": (f"⛔ drift toward a REJECTED option — {d.get('not_this','')}. "
+                                          f"Decision «{d.get('id','?')}» chose: {d.get('choice','')} over it"
+                                          + ((" (" + d['why'] + ")") if d.get("why") else "")
+                                          + ". Don't drift back; revisit only if the user EXPLICITLY says to.")})
+        except re.error:
+            continue
+    if not located and not items:
         return [], []
     # mastery state — the soft understanding-gate: acting on a decision you haven't walked in
     # quiz gets flagged (never blocked). Fail-open to "treat as mastered" so a missing state
@@ -92,7 +114,6 @@ def assess(data):
     except Exception:
         prog = {}
     session = data.get("session_id", "")
-    items = []
     for d in located:
         did = d.get("id", "?")
         if _seen_then_mark(session, did):
