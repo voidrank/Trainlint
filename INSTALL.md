@@ -79,8 +79,9 @@ cd ~/Trainlint/trainlint/research && python3 test_research.py # 9/9
 
 - `HARNESS_MODEL=1` (+ `ANTHROPIC_API_KEY`) — small-model semantic recall booster (a Haiku
   selector over the vetted rule catalog; it never invents advice).
-- `HARNESS_QUIZ=1` or a `.quiz-gate` file — surface a relevant knowledge question at
-  high-stakes moments (never blocks).
+
+(The concept-gap quiz needs no knob — it fires automatically as a popup the moment you ask what a
+term means. The old opt-in `HARNESS_QUIZ` / `.quiz-gate` mid-action gate was removed.)
 
 ## Use it on another project (not MiMo)
 

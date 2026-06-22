@@ -101,10 +101,12 @@ to session boundaries (a session may never end):
 - **viz** — when the tree gains a *real* search (branching or a wall), nudge to render + send it.
 - harvest runs on `PreCompact`/`SessionEnd`.
 
-Quizzing is **plan-driven** (the SessionStart understanding-gate + `/trainlint:quiz` over the plan's
-decisions) and **concept-gap** (the `concept-gap-quiz` coach trigger fires when you ask what a term
-means → define it plainly + quiz it + log it to `research/glossary.<name>.jsonl`). It is **never** a
-mid-action interruption — the old opt-in quiz-gate was removed.
+Quizzing has two paths: **deliberate** (`/trainlint:quiz` over the plan's decisions) and
+**concept-gap** (the `concept-gap-quiz` trigger fires the moment you ask what a term means / say you
+don't follow one → it **escalates a popup**: quiz you first, then define it plainly and log it to
+`research/glossary.<name>.jsonl`). The popup is `sticky` — it survives even when the touched decision
+is already settled, since a concept gap is never a false alarm. The old soft SessionStart quiz nudge
+and the opt-in mid-action quiz-gate were both removed.
 
 ## Adding a rule / quiz question
 

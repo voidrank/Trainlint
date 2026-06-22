@@ -24,7 +24,6 @@ sys.path.insert(0, str(HERE))
 import tree      # noqa: E402
 import lint      # noqa: E402  (lint.brief)
 import plan      # noqa: E402  (plan.brief — the project's decision floor-plan)
-import progress  # noqa: E402  (plan-quiz mastery/coverage state)
 
 STATE = HERE / ".state"
 
@@ -64,16 +63,9 @@ def context_briefing(name, nodes):
         parts.append("goal: " + goal)
     pl = plan.load(name)
     if pl:
-        # understanding-gate — LEAD with it (prominent), at the session boundary, never mid-work:
-        # the user is meant to fully understand the project before working, via the plan-quiz.
-        try:
-            tg = progress.targets(pl, name=name)
-        except Exception:
-            tg = []
-        if tg:
-            parts.append(f"⚠️ you have NOT fully walked this project yet — {len(tg)}/{len(pl)} "
-                         f"decisions un-mastered. Understanding them comes first: `/trainlint:quiz` "
-                         f"(soft — it only drills the un-mastered ones).")
+        # NOTE: the SessionStart quiz nudge was removed on purpose — it was a soft, easily-ignored
+        # suggestion. Quizzing now fires as a user-facing popup the moment a concept gap shows
+        # (the `concept-gap-quiz` escalate trigger), not as a session-boundary reminder.
         mt = plan.main_thread(pl)
         tail = f" — MAIN THREAD (drive this next): {mt['decision']}" if mt else " — all decisions settled"
         parts.append(plan.brief(name) + tail)

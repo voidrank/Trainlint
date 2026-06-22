@@ -53,13 +53,13 @@ def decide(data):
     if any(d.get("status") == "verified" for d in located):
         for it in items:
             if (_level(it) == "escalate" and not it.get("certain")
-                    and not it.get("plan_decision")):
+                    and not it.get("plan_decision") and not it.get("sticky")):
                 it["level"] = "coach"
                 it["message"] = "(plan: this decision is settled) " + it.get("message", "")
 
-    # NOTE: the old mid-action quiz-gate was removed here on purpose. Quizzing is now PLAN-DRIVEN
-    # (the SessionStart understanding-gate + /trainlint:quiz over the plan's decisions), and concept
-    # gaps are caught by the `concept-gap-quiz` coach trigger — never a mid-action interruption.
+    # NOTE: the old mid-action quiz-gate (hooks/quiz.py) was deleted. Quizzing now has two paths:
+    # the deliberate /trainlint:quiz command over the plan's decisions, and the `concept-gap-quiz`
+    # trigger, which ESCALATES (a user-facing popup) the moment a concept gap shows in the prompt.
 
     # An unexpanded {{placeholder}} means a project fact this rule needs isn't filled yet
     # (a freshly-registered project before /trainlint:plan). Drop it — the rule isn't ready,

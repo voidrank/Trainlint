@@ -52,26 +52,6 @@ def main():
                 print(f"        channel: expected {c['expect_channel']}, got {ch}")
             if missing:
                 print(f"        missing substrings: {missing}")
-    # --- quiz-gate: off by default, surfaces when enabled (never blocks) ---
-    import os
-    import quiz
-    os.environ.pop("HARNESS_QUIZ", None)
-    total += 1
-    if quiz.ask({"hook_event_name": "PreToolUse"}, "sbatch x"):
-        fails += 1
-        print("FAIL  [quiz    ] should be OFF by default")
-    else:
-        print("ok    [quiz    ] off by default")
-    os.environ["HARNESS_QUIZ"] = "1"
-    total += 1
-    got = quiz.ask({"hook_event_name": "PreToolUse"}, "sbatch --per_device 16")
-    if got:
-        print(f"ok    [quiz    ] fires when enabled -> {got[0]['id']}")
-    else:
-        fails += 1
-        print("FAIL  [quiz    ] should fire when enabled on launch")
-    os.environ.pop("HARNESS_QUIZ", None)
-
     # --- model backend: union-merges semantic catches on top of the regex floor ---
     import classifier
     classifier.set_backend(lambda d: [{"class": "coach", "name": "MOCK", "message": "MOCK-EXTRA"}])

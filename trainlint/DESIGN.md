@@ -221,5 +221,10 @@ Iron rule (same as §8 item 0): **the question tests the `principle`, the domain
 principle (e.g. `np.zeros`→OOD and `power=2.0`→OOD are both `frozen-component-contract`), they should
 **share the same `principle`**—this is exactly the expression of "principles are transferable, instances are not."
 
-quiz-gate is OPT-IN (env `HARNESS_QUIZ=1` or a `.quiz-gate` file): on a high-risk action it pops, per `when`,
-one relevant question (with `context`), **surfacing only, never blocking**. It tests whether you understand; it doesn't intercept for you.
+Quizzing has two paths (the old opt-in mid-action quiz-gate was removed — it was dead, gated behind a
+flag and unwired from the router): the deliberate `/trainlint:quiz` command over the plan's decisions,
+and the `concept-gap-quiz` trigger. The trigger fires the moment a concept gap shows in the prompt
+("what is X" / "I don't follow X") and **escalates a user-facing popup** (level `escalate`) rather than
+a silent coach steer. It carries `sticky: true`, which exempts it from the plan-aware "settled
+decision → downgrade to coach" rule: a concept gap is never a false alarm, even on a closed decision.
+The popup surfaces and asks you to prove understanding; it never blocks.

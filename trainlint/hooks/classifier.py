@@ -91,7 +91,13 @@ def _regex_rubric(data):
         inj = facts.expand((t.get("inject") or "").strip())
         if inj and inj not in seen:
             seen.add(inj)
-            out.append({"class": "coach", "name": t.get("name", ""), "message": inj})
+            # a trigger is a silent coach by default; one can opt up to "escalate"
+            # (level field) to surface as a user-facing popup, not just an agent steer.
+            # `sticky` exempts it from the plan-aware "settled decision" downgrade — for
+            # escalations that aren't false alarms even when the touched decision is closed
+            # (e.g. a concept-gap quiz: the user asking what a term means is always worth it).
+            out.append({"class": t.get("level", "coach"), "name": t.get("name", ""),
+                        "message": inj, "sticky": bool(t.get("sticky"))})
     return out
 
 
