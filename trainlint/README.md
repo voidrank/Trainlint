@@ -69,8 +69,8 @@ trainlint/
 │   ├── plan.py            the decision floor-plan + main_thread() selector
 │   ├── progress.py        plan-quiz mastery/coverage state
 │   ├── plan.mimo.jsonl  facts.mimo.json  goal.mimo.txt  knowledge.mimo.jsonl  log.mimo.jsonl
+│   ├── plan.workflow.js  internal engine for /trainlint:plan (big-codebase offload; not its own command)
 │   ├── tree.py  governor.py  surfacer.py  viz.py  lint.py  harvest.py  new_project.py
-├── workflows/plan.workflow.js   optional background planner (foreground is the default)
 ├── commands/{init,plan,quiz,viz,lint}.md
 └── tests/{run.py, cases.jsonl, test_planaware.py}   +  research/test_research.py
 ```

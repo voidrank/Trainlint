@@ -1,6 +1,6 @@
 export const meta = {
-  name: 'trainlint-plan',
-  description: 'Build the project plan deterministically: gather full context, decompose into decisions, and WRITE plan.<name>.jsonl (+ fill the facts files). The write is guaranteed by the script, not left to the model to remember.',
+  name: 'plan-engine',
+  description: 'Internal engine for /trainlint:plan (not a standalone command). The big-codebase offload path: gather full context in parallel, decompose into decisions, and WRITE plan.<name>.jsonl (+ fill the facts files). The write is guaranteed by the script, not left to the model to remember.',
   phases: [
     { title: 'Gather', detail: 'parallel readers over code / configs / memory / runs' },
     { title: 'Decompose', detail: 'synthesize complete context + the ordered decisions' },
@@ -18,7 +18,7 @@ if (!project || !root) {
   const r = await agent(
     'Find the trainlint plugin and its active project. ' +
     '(1) pluginRoot = the absolute path of the directory that contains `.active-project`, ' +
-    '`project.<name>.json`, and the `research/` + `workflows/` folders (look under ' +
+    '`project.<name>.json`, and the `research/` + `hooks/` folders (look under ' +
     '~/.claude/plugins/cache/trainlint/*/ and any Trainlint checkout). ' +
     '(2) project = the exact name inside that `.active-project` file. Return both.',
     { label: 'resolve-args', schema: { type: 'object', additionalProperties: false,
@@ -120,7 +120,7 @@ const plan = await agent(
 phase('Write')
 const planHeader =
   `# Project PLAN for ${project} — the ordered DECISIONS that define this run, each tagged with the\n` +
-  `# transferable PRINCIPLE that governs it. Written by the trainlint-plan workflow.\n` +
+  `# transferable PRINCIPLE that governs it. Written by /trainlint:plan.\n` +
   `# fields: id | phase | decision | choice | principle | why | status(open|decided|verified) | match(regex)`
 const planBody = (plan.decisions || []).map(d => JSON.stringify(d)).join('\n')
 

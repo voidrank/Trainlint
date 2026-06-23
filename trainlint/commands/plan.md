@@ -115,9 +115,11 @@ Just read the existing plan and show it grouped by phase with status icons (✓ 
 ○ open), calling out `open` and `decided`-but-unverified ones. Change nothing. (`python3
 research/plan.py` prints this.)
 
-## Optional — offload the reading to a background workflow (only for a huge codebase)
-If gathering context would mean reading a very large codebase, you MAY offload the parallel reading
-to `${CLAUDE_PLUGIN_ROOT}/workflows/plan.workflow.js` via the Workflow tool
-(`args: { project, pluginRoot }` — pass them or the script plans the wrong project). It runs in the
-background and writes the plan itself. Trade-off: you lose the live, interactive feel and come back
-to a finished result. Default to the foreground flow above unless the codebase is genuinely too big.
+## Optional — offload the reading to the background planning engine (only for a huge codebase)
+`/trainlint:plan` is the ONLY plan command. For a normal project, do the foreground flow above. If
+gathering context would mean reading a very large codebase, this same command MAY offload the parallel
+reading to its internal engine at `${CLAUDE_PLUGIN_ROOT}/research/plan.workflow.js` via the Workflow
+tool (`scriptPath` it; `args: { project, pluginRoot }` — pass them or the script plans the wrong
+project). It runs in the background and writes the plan itself. The engine is not a separate command —
+it's an implementation detail of this one. Trade-off: you lose the live, interactive feel and come
+back to a finished result. Default to the foreground flow above unless the codebase is genuinely too big.

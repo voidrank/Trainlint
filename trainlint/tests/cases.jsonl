@@ -32,3 +32,5 @@
 # --- eval-validity rules ---
 {"desc": "ablation accuracy prompt -> coach (metric-by-region)", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "看下 ablation 的 accuracy 怎么样"}, "expect_channel": "coach", "expect_contains": ["MAJORITY"]}
 {"desc": "onset_floor mention -> coach (no-crutch)", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "用 onset_floor 跑一版看 turn-taking"}, "expect_channel": "coach", "expect_contains": ["crutch"]}
+{"desc": "frozen codec wrong sample_rate -> precise escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/encode.py", "content": "codes = dac.encode(wav, sample_rate=16000)"}}, "expect_channel": "escalate", "expect_contains": ["FROZEN-CODEC", "sample_rate=16000"]}
+{"desc": "frozen codec correct sample_rate -> no codec-mismatch escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/encode.py", "content": "codes = dac.encode(wav, sample_rate=24000)"}}, "expect_channel": "coach", "expect_not_contains": ["FROZEN-CODEC"]}
