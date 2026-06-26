@@ -35,19 +35,22 @@ words.
 The skill is in what it *doesn't* send you. It taps your shoulder only for the one case a machine
 can't judge and a quiet word can't fix — so you never end up muting it.
 
-**What that looks like.** Say the agent writes this, mid-flow:
+**What that looks like.** Say the agent writes this loss, mid-flow:
 
 ```python
-mel = MelSpectrogram(sample_rate=24000, n_mels=128)   # power defaults to 2.0
+loss = F.cross_entropy(logits.view(-1, vocab), labels.view(-1))
 ```
 
-No machine can say if that's right — so Trainlint stops and hands you the diff:
+It runs. The loss even drops. But the next-token shift is gone — the model is being asked to predict
+each token from *itself*. Whether that's a bug only you can say (an autoregressive model needs the
+shift; a diffusion model must *not* have it), so Trainlint hands you the diff:
 
-> *You changed the mel preprocessing fed to the frozen codec, but it isn't aligned with its
-> training config — don't trust library defaults. Please confirm.*
+> *The loss lost its off-by-one shift (`logits[:, :-1]` vs `labels[:, 1:]`). Without it an
+> autoregressive model just learns to copy its input — the loss keeps dropping while the output
+> collapses to one repeated token. Please confirm.*
 
-The codec was trained on `power=1.0`. `2.0` is a different spectrogram; the model would have quietly
-learned around it. Nothing crashed. No test went red. That's the week you keep.
+Nothing crashed. No test went red. The model would have spent the whole run learning to echo. That's
+the week you keep.
 
 ![the frustrating loop vs. catching it at write time](docs/the-loop.png)
 
