@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 300" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#666"/>
+    </marker>
+    <marker id="arRed" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#d23"/>
+    </marker>
+  </defs>
+
+  <!-- ============ WITHOUT TRAINLINT ============ -->
+  <text x="24" y="28" font-size="15" font-weight="700" fill="#c0392b" letter-spacing="1.5">WITHOUT TRAINLINT</text>
+
+  <!-- the vicious retrain loop, arcing back from "looks fine but wrong" to "train for days" -->
+  <path d="M461,86 C461,44 250,44 250,86" fill="none" stroke="#d23" stroke-width="2" marker-end="url(#arRed)"/>
+  <text x="355" y="40" font-size="13" fill="#d23" text-anchor="middle" font-style="italic">retune · retrain — weeks of GPU</text>
+
+  <g font-size="15" fill="#333" text-anchor="middle">
+    <rect x="24"  y="88" width="120" height="40" rx="9" fill="#fef6e7" stroke="#e0b050"/>
+    <text x="84"  y="113">change a line</text>
+
+    <rect x="190" y="88" width="120" height="40" rx="9" fill="#fef6e7" stroke="#e0b050"/>
+    <text x="250" y="113">train for days</text>
+
+    <rect x="356" y="88" width="210" height="40" rx="9" fill="#fef6e7" stroke="#e0b050"/>
+    <text x="461" y="113">looks fine — but it's wrong</text>
+
+    <rect x="612" y="88" width="184" height="40" rx="9" fill="#f8d7da" stroke="#d23"/>
+    <text x="704" y="113" fill="#a01122" font-weight="600">a week gone</text>
+  </g>
+  <line x1="144" y1="108" x2="188" y2="108" stroke="#666" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="310" y1="108" x2="354" y2="108" stroke="#666" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="566" y1="108" x2="610" y2="108" stroke="#666" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- ============ WITH TRAINLINT ============ -->
+  <text x="24" y="208" font-size="15" font-weight="700" fill="#1e8449" letter-spacing="1.5">WITH TRAINLINT</text>
+
+  <g font-size="15" fill="#333" text-anchor="middle">
+    <rect x="24"  y="228" width="120" height="40" rx="9" fill="#eafaf1" stroke="#52b788"/>
+    <text x="84"  y="253">change a line</text>
+
+    <rect x="190" y="228" width="200" height="40" rx="9" fill="#eafaf1" stroke="#52b788"/>
+    <text x="290" y="253">caught as you type</text>
+
+    <rect x="436" y="228" width="210" height="40" rx="9" fill="#d4efdf" stroke="#1e8449"/>
+    <text x="541" y="253" fill="#1e6b3a" font-weight="600">fixed — 0 GPU wasted</text>
+  </g>
+  <line x1="144" y1="248" x2="188" y2="248" stroke="#666" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="390" y1="248" x2="434" y2="248" stroke="#666" stroke-width="2" marker-end="url(#ar)"/>
+</svg>

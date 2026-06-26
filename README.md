@@ -52,17 +52,7 @@ shift; a diffusion model must *not* have it — so Trainlint hands you the diff:
 Nothing crashed. No test went red. The model would have spent the whole run learning to echo. That's
 the week you keep.
 
-```text
-WITHOUT TRAINLINT
-  change a line → train for days → "loss drops, nothing crashes" → but the output is off
-       ↺  blame the data · retune · retrain · repeat — for weeks of GPU
-  …until you finally diff line by line: one default was wrong the whole time.   💸
-
-WITH TRAINLINT
-  change a line → ⚠ flagged the moment you type it → fixed.   ✅  0 GPU wasted
-```
-
-*Where a silent bug sends you — and where Trainlint cuts the loop.*
+![the loop a silent bug puts you in — and where Trainlint cuts it](docs/the-loop.svg)
 
 **It knows the shapes silent bugs come in.** They feel endless, but they aren't — a few families
 cover almost all of them:
