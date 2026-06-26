@@ -104,14 +104,43 @@ Present this full picture to me FIRST and let me correct it.
    decision's governing principle as a question, grade against the principle, **answer SHARP**
    (concrete fact first, principle second, zero hedging), drill misses with fresh scars, and
    `progress.mark` the ones I get. Soft — "skip" exits.
-6. **Light up the compass — DON'T end on a menu.** Close by stating, in this shape:
-   `🎯 goal: <the north star>  ·  main thread: <the load_bearing open decision — everything hinges
-   on this>  ·  next: <one concrete action to settle it>`. Then **drive it** — propose the next move
-   and go do it (e.g. "let me run that cheap test now"). Do NOT present a flat list of all decisions
-   and ask "which to change / want to quiz?" — that offloads the priority back to me and kills the
-   momentum. One thread, one next action, in pursuit.
-   Also: **don't push empty tools.** If no experiments have run yet, `viz`/`lint` are empty — skip
-   them; the main thread is the destination, not a tool.
+6. **The closing REPORT — explain it like a person, end in motion.** When the decisions are written,
+   give me a report a teammate who *just walked in* could follow — not a status dump in project patois.
+   The layout below is layered (short first, expand only the one thing that matters); the **VOICE** is
+   what makes it explainable, and the voice is the point of this step. Five rules for the voice:
+
+   1. **Write from the reader's chair.** Assume I did NOT build this. The job is to make an outsider
+      understand. Define each term the first time it appears, in one plain phrase. (The curse of
+      knowledge: the writer forgets the reader doesn't share the jargon.)
+   2. **Point at the real thing, not its codename.** Don't report `duplex-interleave-layout` /
+      `time-grid-coherence`; say what it IS — "keeping the words and the audio from drifting apart."
+      The id is a filename; lead with the plain meaning and keep the id as a trailing tag.
+   3. **Known before new, joined by because/therefore.** Anchor each new idea to a familiar one, and
+      show the causal chain so I see WHY one decision gates the next ("the codec is locked first
+      because it's the clock everything else times against"). A report is a chain, not a list.
+   4. **Concrete numbers beat abstract principles.** "5 words ≈ 230 ms of audio but barely any content,
+      so a long sentence drifts" explains; "principle: anchor-to-codec-clock" does not. Lead the *why*
+      with the mechanism/number; the principle name is secondary.
+   5. **Cut the ceremony.** No "BLUF", no icon legends, no "details-on-demand" labels in the prose —
+      that is talking *about* the report instead of giving it. Just explain.
+
+   Then lay it out in this order (layered, but don't announce the layers):
+   - **What we're building + where it stands** — one plain sentence, then `<N>/<total> decided ·
+     <k> pillars · main thread → <plain name of the load_bearing decision>`.
+   - **The map** — the phase-grouped skeleton from `python3 research/plan.py` (don't hand-format it).
+     A picture of the whole shape, not a list of options to pick from.
+   - **What's locked** — each `decided` one in a sentence: its plain meaning, what we chose, and (if it
+     carries an anti-prior) what we ruled out and why. The foundation I can trust.
+   - **The one thing everything waits on** — expand ONLY the `load_bearing` decision: the real problem
+     in plain words, the concrete reason it gates the rest, and the cheapest test that could kill it.
+   - **Next, and drive it** — one concrete action to settle that, then GO DO IT (propose the move and
+     start). Don't stop to ask which decision I'd like to revisit — that hands priority back to me and
+     kills momentum.
+   - **Everything else** — one line: "<M> still open across <phase>→<phase> — ask about any, or
+     `/trainlint:quiz` to drill them." A pointer, not a dump.
+
+   **Don't push empty tools:** if no experiments have run yet, `viz`/`lint` are empty — skip them; the
+   main thread is the destination, not a tool.
 
 If the plan ends up only partly written (we ran out of room, got pulled away), that's fine — the
 SessionStart briefing flags a registered-but-unwritten plan, the understanding-gate flags the
@@ -119,9 +148,11 @@ un-mastered decisions, and the compass keeps the goal + main thread visible ever
 is silently dropped and the work stays pointed at the one thing that matters.
 
 ## `review` / `status`
-Just read the existing plan and show it grouped by phase with status icons (✓ verified · decided
-○ open), calling out `open` and `decided`-but-unverified ones. Change nothing. (`python3
-research/plan.py` prints this.)
+Read the existing plan and report it back in the SAME explain-like-a-person voice as step 6 (the five
+voice rules) — what we're building, where it stands, what's locked, and the one thing everything waits
+on. `python3 research/plan.py` prints the phase-grouped map; wrap that map in plain prose, don't just
+paste it. Change nothing on disk. Unlike the fresh-plan close, review is READ-ONLY: end on a
+recommendation ("the cheapest next move is X — want me to?"), don't auto-start the action.
 
 ## Optional — offload the reading to the background planning engine (only for a huge codebase)
 `/trainlint:plan` is the ONLY plan command. For a normal project, do the foreground flow above. If

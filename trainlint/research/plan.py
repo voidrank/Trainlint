@@ -167,9 +167,26 @@ if __name__ == "__main__":
     if not pl:
         print(f"(no plan for project '{_active(nm)}' — draft one with /trainlint:plan)")
         sys.exit(0)
-    s = summary(pl)
-    print(brief(nm))
+    # Compact, phase-grouped MAP — the "overview" layer of the plan report (Shneiderman: overview
+    # first). Scannable by id + status icon; details stay on demand (read plan.<name>.jsonl / quiz).
+    mt = main_thread(pl)
+    head = brief(nm)
+    if mt:
+        head += f"  ·  main thread → {mt.get('id','')}"
+    print(head)
+    ICON = {"verified": "✓", "decided": "●", "open": "○"}
+    width = max((len(n.get("id", "")) for n in pl), default=0)
+    phases = []  # phases in first-appearance order — no hard-coded list, generic across projects
     for n in pl:
-        mark = {"verified": "✓", "decided": "·", "open": "○"}.get(n.get("status", "open"), "?")
-        print(f"  {mark} [{n.get('phase','')}] {n.get('decision','')}"
-              f"  → {n.get('choice','') or 'UNDECIDED'}   «{n.get('principle','')}»")
+        if n.get("phase", "") not in phases:
+            phases.append(n.get("phase", ""))
+    for ph in phases:
+        print(f"\n  {ph}")
+        for n in pl:
+            if n.get("phase", "") != ph:
+                continue
+            mark = ICON.get(n.get("status", "open"), "?")
+            tags = ("★" if n.get("load_bearing") else " ") + ("◆" if n.get("pillar") else "")
+            print(f"    {mark} {n.get('id',''):<{width}}  {tags}")
+    print("\n  ●=decided ○=open ✓=verified · ★=main thread ◆=pillar"
+          "  ·  detail: read research/plan.<name>.jsonl or /trainlint:quiz")
