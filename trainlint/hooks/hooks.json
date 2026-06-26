@@ -36,6 +36,13 @@
           { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/research/flow.py\"" }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/router.py\"" }
+        ]
+      }
     ]
   }
 }

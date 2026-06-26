@@ -146,6 +146,12 @@ Present this full picture to me FIRST and let me correct it.
    **Don't push empty tools:** if no experiments have run yet, `viz`/`lint` are empty — skip them; the
    main thread is the destination, not a tool.
 
+   **This is enforced, not just asked.** A finished report is prose, not a tool action, so it used to
+   reach no hook — the voice rules were persuasion the model drops at large context. The `Stop` hook
+   (`hooks/reportcheck.py`) now reads the emitted report: if it walks the plan but skips the stance
+   line or the map (or leads with bare decision-ids), it bounces ONCE for a rewrite. So the layout
+   above is a contract the doorman checks, not a suggestion.
+
 If the plan ends up only partly written (we ran out of room, got pulled away), that's fine — the
 SessionStart briefing flags a registered-but-unwritten plan, the understanding-gate flags the
 un-mastered decisions, and the compass keeps the goal + main thread visible every turn — so nothing

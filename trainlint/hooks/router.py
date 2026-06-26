@@ -25,6 +25,7 @@ import checks         # noqa: E402
 import classifier     # noqa: E402
 import planaware      # noqa: E402
 import readtrack      # noqa: E402
+import reportcheck    # noqa: E402
 
 _RANK = {"reject": 3, "escalate": 2, "coach": 1}
 
@@ -35,6 +36,18 @@ def _level(item):
 
 def decide(data):
     """Pure function: hook event dict -> output dict (or None for silent)."""
+    # STOP path — the REPORT doorman. A finished message is prose, not an action, so the
+    # action pipeline (prefilter/checks/classifier/planaware) has nothing to bind to; run
+    # ONLY the report gate. It blocks the turn via decision:block (Stop has no tool to deny),
+    # which feeds the rewrite back to the model — bounded to ONE rewrite by stop_hook_active.
+    event = data.get("hook_event_name", "UserPromptSubmit")
+    if event in ("Stop", "SubagentStop"):
+        items = reportcheck.check(data)
+        if not items:
+            return None
+        return {"decision": "block",
+                "reason": "\n\n".join(i["message"] for i in items)}
+
     # record reads FIRST (before the prefilter drops them) so we know what the agent has looked at
     readtrack.record(data)
     if prefilter.classify_action(data) == "drop":
@@ -70,7 +83,6 @@ def decide(data):
     if not items:
         return None
 
-    event = data.get("hook_event_name", "UserPromptSubmit")
     is_tool = event in ("PreToolUse", "PostToolUse")
 
     rejects = [i for i in items if _level(i) == "reject"]
