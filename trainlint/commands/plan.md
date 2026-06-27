@@ -13,7 +13,7 @@ decision. If the plan file is gone (e.g. a plugin update started a fresh cache) 
 rebuild it from a session, run `from-log`:
 
 1. **Find the transcript.** Session logs are JSONL at `~/.claude/projects/<project-dir>/<id>.jsonl`.
-   `$ARGUMENTS` after `from-log` may be a session id, a full path, or a hint ("the megafish session")
+   `$ARGUMENTS` after `from-log` may be a session id, a full path, or a hint ("a prior session")
    — resolve it (newest matching log if a hint). The file can be huge: **grep/stream it, never read
    it whole** (or hand it to a subagent).
 2. **Extract what the session ESTABLISHED**, not every passing remark: the GOAL (name the pillars in
@@ -89,17 +89,17 @@ Present this full picture to me FIRST and let me correct it.
    project always rests on.) And when you write the GOAL (step 2), NAME the pillars in it — don't
    collapse a multi-component project into the single flashiest component.
    **Anti-prior:** if a decision REJECTS an option you (the agent) would otherwise keep drifting
-   toward — because your context is saturated with it (e.g. "build on megafish, NOT in the MiMo
-   codebase / NOT MiMo's codec"; "fresh-from-base, NOT resume a prior duplex ckpt") — pin it with
+   toward — because your context is saturated with it (e.g. "build on repo A, NOT in repo B
+   codebase / NOT repo B's codec"; "fresh-from-base, NOT resume a prior duplex ckpt") — pin it with
    `"not_this": "<the rejected usage in plain words>"` and `"not_re": "<regex for an action drifting
    toward it>"`. Make `not_re` match the rejected *usage*, NOT the legitimate reference (so "borrow
-   MiMo's recipe/data" must NOT trip it). The doorman then catches that drift on every action and the
+   repo B's recipe/data" must NOT trip it). The doorman then catches that drift on every action and the
    compass keeps it in front of you every turn — so a strong prior can't quietly win back the decision.
 4. **While establishing context, also FILL the facts files** init left empty (you're the one reading
    the code): `project.<name>.json` (the doorman's danger patterns — bad_storage_re,
    locked_configs_re, preproc_trap_re/preproc_ok_re, frozen_component, the *_example fields; see
-   `project.mimo.json`) and `research/facts.<name>.json` (runs_glob, direction_regex,
-   candidate_moves, trunk_checks; see `research/facts.mimo.json`). Leave a key empty rather than fake it.
+   `project.example.json`) and `research/facts.<name>.json` (runs_glob, direction_regex,
+   candidate_moves, trunk_checks; see `research/facts.example.json`). Leave a key empty rather than fake it.
 5. **Quiz me** — once the decisions are written, walk them as `/trainlint:quiz` does. Pose **every**
    question through the **`AskUserQuestion` tool** (NOT plain text + end-of-turn — that produces no
    pop-up and the operator misses it): one correct option paraphrasing the answer, the `naive` wrong

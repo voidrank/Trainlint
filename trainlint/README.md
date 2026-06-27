@@ -4,7 +4,7 @@ A **soft guardrail harness** for AI/ML training, packaged as a Claude Code plugi
 
 A "doorman" between you and the coding agent. On every message / agent tool-use it
 does one of four things — **let it pass / quietly remind the agent / stop it and alert you / bounce the agent outright** —
-to stop the *silent* failures that wasted weeks in a real Duplex-MiMo saga
+to stop the *silent* failures that wasted weeks in a real training project
 (power=2.0 mel / OOD silence codes / dropped AR-shift / DeepSpeed scheduler override
 / fake demos / serial guessing …). Plus two more layers: it keeps you on the **main thread**
 of the work, and it maps the **search tree** of what you've already tried.
@@ -67,25 +67,27 @@ it gates only objective, spec-mandated misses, never a judgement about "good pro
 trainlint/
 ├── DESIGN.md  README.md
 ├── triggers.jsonl         coach rules (§1 portable core / §2 templated principles)
-├── project.mimo.json      this project's action-rule facts (swap to port)
+├── project.example.json      this project's action-rule facts (swap to port)
 ├── quiz.jsonl             principle bank: each Q = a transferable principle via a scar
 ├── hooks/
 │   ├── router.py          orchestrator (fail-open, exit 0, permissionDecision)
 │   ├── prefilter.py  checks.py + checks.jsonl  classifier.py  planaware.py  facts.py
 │   ├── reportcheck.py     the REPORT doorman (Stop event): plan-report readability gate
+│   ├── codex_compat.py    Codex shim: apply_patch envelope -> Claude-style Edit tool_input
 │   ├── hooks.json
 │   └── verifiers/         REAL checks (mel-power, frozen-encode, manifest-leak, effective-lr, model-code, shape-flow)
 ├── research/              the PROJECT layer (plan / compass / search-tree), per-project facts
 │   ├── flow.py            lifecycle hook: context briefing · always-on compass · hints · viz
 │   ├── plan.py            the decision floor-plan + main_thread() selector
 │   ├── progress.py        plan-quiz mastery/coverage state
-│   ├── plan.mimo.jsonl  facts.mimo.json  goal.mimo.txt  knowledge.mimo.jsonl  log.mimo.jsonl
+│   ├── plan.example.jsonl  facts.example.json  goal.example.txt  knowledge.example.jsonl  log.example.jsonl
 │   ├── plan.workflow.js  internal engine for /trainlint:plan (big-codebase offload; not its own command)
 │   ├── tree.py  governor.py  surfacer.py  lint.py  harvest.py  new_project.py
 │   ├── viz.py               research-tree HTML + cross-project index + principles ledger
 │   ├── principles.jsonl     distilled project-AGNOSTIC laws (the refined layer)
 ├── commands/{init,plan,quiz,viz,lint}.md
-└── tests/{run.py, cases.jsonl, test_planaware.py}   +  research/test_research.py
+├── codex/hooks.json  install-codex.sh    Codex CLI port (apply_patch matcher, PreCompact harvest)
+└── tests/{run.py, cases.jsonl, test_planaware.py, test_codex_compat.py}   +  research/test_research.py
 ```
 
 ## Commands (slash commands, when installed as a plugin)
@@ -131,13 +133,18 @@ and the opt-in mid-action quiz-gate were both removed.
 ## Onboard a new project
 
 `/trainlint:init <name>` (thin registrar) → `/trainlint:plan` (it reads the code, fills the facts,
-writes the decisions + goal + glossary, then quizzes you). See `project.mimo.json` /
-`research/*.mimo.*` as worked examples.
+writes the decisions + goal + glossary, then quizzes you). See `project.example.json` /
+`research/*.example.*` as worked examples.
 
 ## Install
 
 See **[../INSTALL.md](../INSTALL.md)** — the plugin install, verification, opt-in knobs
 (`HARNESS_MODEL`), and how to port to another project.
+
+**OpenAI Codex CLI** is supported too: run `./install-codex.sh`. Codex cloned Claude Code's
+hook protocol, so the whole pipeline runs unchanged — the only deltas (`apply_patch` instead of
+Edit/Write, no `SessionEnd`) are absorbed by `hooks/codex_compat.py` and `codex/hooks.json`. See
+INSTALL.md → *Form B*.
 
 ## Test
 

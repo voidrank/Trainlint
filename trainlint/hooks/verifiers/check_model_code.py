@@ -2,7 +2,7 @@
 """FP-filter verifiers for the forward/loss escalations.
 
 The forward/mask and AR-shift rules used to fire on a bare KEYWORD — so they cried wolf on a
-data-pipeline script or a yaml config that merely *mentions* those words (the megafish false
+data-pipeline script or a yaml config that merely *mentions* those words (the data-pipeline false
 alarms). These verifiers gate that: they confirm the edit is ACTUALLY model/loss CODE before
 escalating. They do NOT judge correctness (a human still does that) — they only kill the obvious
 false positives (configs, keyword-with-no-code), keeping recall on genuine model edits.

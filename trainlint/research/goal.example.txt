@@ -1,0 +1,1 @@
+Build a Chinese full-duplex voice model that listens while it speaks; bar for "done": listenable free-running audio (low CER) with correct turn-taking, trained fresh from base on clean power=1.0 codes.

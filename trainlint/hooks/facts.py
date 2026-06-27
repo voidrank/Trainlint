@@ -5,7 +5,7 @@ the active project's facts and expands them.
 Active project resolution (first match wins):
   1. env HARNESS_PROJECT
   2. <plugin_root>/.active-project  (a file containing the project name)
-  3. "mimo"
+  3. "example"
 
 Facts file: <plugin_root>/project.<name>.json
 
@@ -33,7 +33,7 @@ def _active_name():
             return t
     except Exception:
         pass
-    return "mimo"
+    return "example"
 
 
 def load_facts():

@@ -1,8 +1,0 @@
-{
-  "_comment": "Research facts for megafish-duplex. Mechanism (tree/governor/surfacer) is general; this tells it how to read THIS project's traces and its move-set / trunk-checks. runs_glob is empty until the first duplex run lands.",
-  "thresholds": { "patience_P": 3, "window_K": 3, "flat_eps": 0.01 },
-  "runs_glob": "",
-  "direction_regex": "",
-  "trunk_checks": ["diff-vs-S2-base", "verify-turn-boundary-distribution", "trained-enough-epochs", "codec-contract-25Hz-10cb", "streaming-encoder-causal-255-0"],
-  "candidate_moves": ["endpoint-token", "turn-boundary-loss-weight", "dialogue-data-source", "init-from-s2", "freeze-encoder", "nofreeze", "streaming-encoder", "lr", "first-token-latency", "empty-frame-weight"]
-}

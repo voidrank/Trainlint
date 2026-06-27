@@ -35,6 +35,25 @@ READONLY_BASH = re.compile(
 CODE_EXT = re.compile(r'\.(py|json|jsonl|ya?ml|sh|sbatch|toml|cfg|ini|txt|sql)$', re.I)
 DOC_EXT = re.compile(r'\.(md|rst)$', re.I)
 
+# read-only even when CHAINED: `cd x; grep ...`, `grep x | head`, `cd a && ls`.
+# Split on shell separators and require EVERY segment to be a read-only verb
+# (a bare `cd` and the data_lint profiler are benign exploration too). A quoted
+# separator may mis-split, but that only makes a segment fail -> "inspect" (safe:
+# errs toward inspecting, never toward wrongly dropping a write).
+_BASH_SEP = re.compile(r'&&|\|\||[;|\n]')
+_CD_SEG = re.compile(r'^\s*cd\s+\S+\s*$', re.I)
+_PROFILER_SEG = re.compile(r'^\s*python3?\s+\S*data_lint\.py\b', re.I)
+
+
+def _readonly_bash(command):
+    if not command or not command.strip():
+        return False
+    segs = [s for s in _BASH_SEP.split(command) if s.strip()]
+    if not segs:
+        return False
+    return all(_CD_SEG.match(s) or _PROFILER_SEG.match(s) or READONLY_BASH.match(s)
+               for s in segs)
+
 
 def _paths(ti):
     out = []
@@ -99,7 +118,7 @@ def classify_action(data):
     if tool in ("Read", "Grep", "Glob", "NotebookRead", "TodoWrite"):
         return "drop"
     if tool == "Bash":
-        return "drop" if READONLY_BASH.match(ti.get("command", "")) else "inspect"
+        return "drop" if _readonly_bash(ti.get("command", "")) else "inspect"
     if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
         paths = _paths(ti)
         # drop only if EVERY target is provably a doc; otherwise default-open

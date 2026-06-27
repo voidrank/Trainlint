@@ -43,7 +43,7 @@ def _active(name=None):
             return t
     except Exception:
         pass
-    return "mimo"
+    return "example"
 
 
 def load(name=None):
@@ -138,9 +138,9 @@ def pillars(plan=None, name=None):
 def avoided(plan=None, name=None):
     """The explicitly REJECTED options (anti-prior decisions) the agent must not drift back into.
     A decision pins one with two fields:
-      not_this: human-readable rejected option (e.g. "use MiMo's codec/pipeline as the impl")
+      not_this: human-readable rejected option (e.g. "use the reference codebase's pipeline as the impl")
       not_re:   regex that recognizes an action DRIFTING toward it (specific to the rejected
-                *usage*, not the legitimate reference — so 'borrow MiMo's recipe' doesn't trip it)
+                *usage*, not the legitimate reference — so 'borrow the reference recipe' doesn't trip it)
     Used by the compass (ambient reminder) + the plan-aware doorman (action-level catch)."""
     if plan is None:
         plan = load(name)

@@ -37,7 +37,7 @@ _MIN_REPORT_CHARS = 600
 _MIN_CITED_IDS = 2
 # Patois floor: this many distinct STRONG jargon tokens (snake_case / file.ext / config=N)
 # means the report is leaning on raw identifiers instead of plain language. Calibrated on the
-# megafish report (8 strong) vs a compliant rewrite (0) — 4 separates them with margin.
+# a real report (8 strong) vs a compliant rewrite (0) — 4 separates them with margin.
 _MAX_JARGON = 4
 # STRONG markers: a reader who didn't build this can't decode these from the prose.
 # (Bare ALLCAPS acronyms — AR, LR, PPL — are deliberately EXCLUDED: they appear in good prose

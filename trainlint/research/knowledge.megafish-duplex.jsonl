@@ -1,3 +1,0 @@
-# papers/refs indexed by the PROBLEM they solve. one JSON object per line.
-# fields: id | title | problem | concepts[] | prereqs[] | match[] (wall keywords) | read(bool)
-{"id":"moshi-full-duplex","title":"Moshi: a speech-text foundation model for full-duplex dialogue","problem":"Representing simultaneous listen-and-speak streams in one model without a turn assumption","concepts":["parallel audio streams","RQ-Transformer","full-duplex dialogue","streaming codec"],"prereqs":["residual VQ codec","streaming causal encoder"],"match":["parallel-chunk","two stream","full-duplex layout","simultaneous streams","cross-stream mask"],"read":false}

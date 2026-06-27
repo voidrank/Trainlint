@@ -81,4 +81,4 @@ per-project facts (swap these to port — mechanism untouched)
 
 `/trainlint:init <name>` (thin registrar) then `/trainlint:plan` — or hand-write
 `facts/knowledge/log/plan/goal.<name>.*`. The mechanism and `principles.jsonl` are unchanged.
-Active project = `HARNESS_PROJECT` env / `.active-project` file / default `mimo`.
+Active project = `HARNESS_PROJECT` env / `.active-project` file / default `example`.

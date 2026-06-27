@@ -157,7 +157,7 @@ def search_status(node, kinds):
 
 def build_groups(nodes, id2phase, phase_order):
     """Choose the trunk axis. Real CHECKPOINT LINEAGE when run-parents exist (mature,
-    experiment-driven search — e.g. mimo's d3v*). Otherwise group by plan PHASE, so a
+    experiment-driven search — e.g. an experiment-driven run prefix). Otherwise group by plan PHASE, so a
     pre-experiment project (walls + decisions, no runs yet) still reads as a real tree
     AND shares the spine's vocabulary. Returns (groups, axis-name)."""
     by_parent = {}

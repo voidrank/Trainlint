@@ -3,7 +3,7 @@
 
 A finished message is prose, not an action, so it reached no hook; the voice rules
 (commands/plan.md step 6) were pure persuasion. This binds to Stop and bounces a
-report-shaped message that skips the spec's anchors. Run against plan.mimo.jsonl.
+report-shaped message that skips the spec's anchors. Run against plan.example.jsonl.
 """
 import json
 import os
@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "hooks"))
-os.environ["HARNESS_PROJECT"] = "mimo"   # deterministic: gate against the worked-example plan
+os.environ["HARNESS_PROJECT"] = "example"   # deterministic: gate against the worked-example plan
 import router  # noqa: E402
 
 fails = 0
@@ -48,19 +48,19 @@ def _reason(out):
     return (out or {}).get("reason", "")
 
 
-# The real patois report from the megafish session: cites plan ids, NO stance line, NO map.
+# A real patois report from a session: cites plan ids, NO stance line, NO map.
 BAD = (
-    "**Pinned: bootstrap from `checkpoints/omni-30b-a3b-stage3`** at TP=4/EP=8.\n\n"
+    "**Pinned: bootstrap from `checkpoints/stage3-ckpt`** at TP=4/EP=8.\n\n"
     "Going 30B MoE re-opens two decisions — `eff-batch` (now micro-batch + TP/EP) and "
     "`lr-regime` (MoE LR != dense numbers). Noted both in the plan.\n\n"
     "### Where this leaves you\n\n"
-    "- **Codec:** megafish modded_dac_vq — causal, raw waveform @44.1 kHz.\n"
+    "- **Codec:** the project codec — causal, raw waveform.\n"
     "- **Layout:** per-frame interleave, assistant-only loss.\n\n"
-    "- **Base:** omni-30b-a3b-stage3, 30B MoE, fresh start.\n"
+    "- **Base:** the stage3 checkpoint, 30B MoE, fresh start.\n"
     "- **Streaming risk:** closed by construction.\n\n"
     "### The concrete next move\n\n"
     "The first real build step is the data side: produce interleaved duplex packs ordered "
-    "[user_t, asst_t] per frame, with an assistant-only loss_mask riding on megafish's existing "
+    "[user_t, asst_t] per frame, with an assistant-only loss_mask riding on the existing "
     "vq_mask/cu_seqlens machinery via the offline packed builder in rows.py and collator.py. "
     "Everything else — the duplex stage config off stage3, the MoE batch/LR re-grounding — sits "
     "on top of that layout being right.\n\n"
@@ -119,14 +119,14 @@ check(_decision(out) == "block" and "codenames" in _reason(out),
       "ids leading their lines -> bounce on voice rule 2 (codenames, not meanings)")
 
 # 7. Undefined-jargon density: stance + map present and ids glossed, but the body leans on raw
-#    identifiers the plan-id check can't see (cu_seqlens, modded_dac_vq, rows.py, TP=4) -> bounce.
+#    identifiers the plan-id check can't see (cu_seqlens, acme_codec_v2, rows.py, TP=4) -> bounce.
 jargon = (
     "9/17 decided · 3 pillars · main thread → the codec contract.\n\n"
     "phase data ○ ● ✓ main thread →\n\n"
     "The effective batch (`eff-batch`) and learning rate (`lr-regime`) are re-grounded for the new run. "
     "We produce interleaved packs ordered user_t then assistant_t, with an assistant-only loss_mask "
     "riding on the existing vq_mask and cu_seqlens machinery in rows.py and collator.py, feeding the "
-    "modded_dac_vq codec at TP=4 and EP=8.\n\n"
+    "acme_codec_v2 codec at TP=4 and EP=8.\n\n"
     "What's locked: the codec is the clock everything times against, so it goes first; the streams are "
     "interleaved per frame so the model hears the user while it speaks; and the loss only counts the "
     "assistant frames so it learns to stay quiet. The cheapest next move is to trace the offline packer "
@@ -135,7 +135,7 @@ jargon = (
 )
 out = router.decide(_stop_event(jargon, name="jargon"))
 check(_decision(out) == "block" and "jargon" in _reason(out),
-      "raw identifiers (cu_seqlens, modded_dac_vq, rows.py, TP=4) -> bounce on voice rule 1")
+      "raw identifiers (cu_seqlens, acme_codec_v2, rows.py, TP=4) -> bounce on voice rule 1")
 
 # 8. Non-Stop events are untouched by the report gate (no regression to the action paths).
 out = router.decide({"hook_event_name": "Stop", "transcript_path": str(_tmp / "missing.jsonl")})

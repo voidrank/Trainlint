@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Plan-aware doorman tests — the three behaviours the audit demanded.
 
-Run against the worked-example plan.mimo.jsonl (active project = mimo). No
+Run against the worked-example plan.example.jsonl (active project = example). No
 session_id in the events -> dedupe is off -> deterministic.
 """
 import sys
@@ -34,7 +34,7 @@ def _ctx(out):
 # 1. Acting on an OPEN decision -> ESCALATE, with the decision + its principle.
 # absolute paths OUTSIDE the plugin root, else prefilter treats them as self-edits and drops them
 ev_open = {"hook_event_name": "PreToolUse", "tool_name": "Edit",
-           "tool_input": {"file_path": "/home/shiyil/mimo/deploy/stream.py",
+           "tool_input": {"file_path": "/home/user/proj/deploy/stream.py",
                           "new_string": "use the bidirectional encoder for streaming"}}
 items, located = planaware.assess(ev_open)
 check(any(i.get("plan_decision") == "streaming-encoder" and i["level"] == "escalate"
@@ -48,7 +48,7 @@ check("streaming-encoder" in _surfaced(out) or "UNDECIDED" in _surfaced(out),
 #    escalation is DOWNGRADED (no false user interruption), and the right principle is
 #    delivered as a coach note. This is the audit's central false-alarm case.
 ev_tf = {"hook_event_name": "PreToolUse", "tool_name": "Write",
-         "tool_input": {"file_path": "/home/shiyil/mimo/tf_top1.py",
+         "tool_input": {"file_path": "/home/user/proj/tf_top1.py",
                         "content": "teacher forcing top-1; uses a sampler and top_p over logits"}}
 items, located = planaware.assess(ev_tf)
 check(any(d.get("id") == "eval-protocol" and d.get("status") == "verified" for d in located),
@@ -63,7 +63,7 @@ check("free-running" in _ctx(out) or "eval-protocol" in _ctx(out),
 #    decision. A mel edit hits the real mel-power verifier AND the verified mel-power plan
 #    decision; the verifier escalation must still reach the user.
 ev_mel = {"hook_event_name": "PreToolUse", "tool_name": "Edit",
-          "tool_input": {"file_path": "/home/shiyil/mimo/encode.py",
+          "tool_input": {"file_path": "/home/user/proj/encode.py",
                          "new_string": "mel = MelSpectrogram(sample_rate=24000, power=2.0)"}}
 out = router.decide(ev_mel)
 check("user" in _surfaced(out).lower() or "confirm" in _surfaced(out).lower()
@@ -73,7 +73,7 @@ check("user" in _surfaced(out).lower() or "confirm" in _surfaced(out).lower()
 # 4. ANTI-PRIOR WATCH — drifting toward an explicitly rejected option is caught on ANY action,
 #    coach-level (agent-facing), and names the decision that rejected it.
 ev_drift = {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-            "tool_input": {"command": "torchrun train.py --resume dup_d3v21s/latest"}}
+            "tool_input": {"command": "torchrun train.py --resume dup_run21s/latest"}}
 items, _ = planaware.assess(ev_drift)
 check(any("REJECTED" in i["message"] and i.get("plan_decision") == "ckpt-init" for i in items),
       "anti-prior: resuming from a previous duplex ckpt is flagged (cites ckpt-init)")
@@ -90,7 +90,7 @@ check(not any("REJECTED" in i["message"] for i in items_ok),
 # 5. HARD GATE — model/loss/training-stage work on an UN-DRILLED decision now BLOCKS the tool
 #    action (reject -> permissionDecision deny) until the decision is quizzed + mastered. The
 #    gate-clearing `progress.py mark` command is exempt (catch-22 guard); non-high-stakes never gate.
-_sp = HOOKS.parent / "research" / ".state" / "mimo.plan-progress.json"    # ensure nothing mastered
+_sp = HOOKS.parent / "research" / ".state" / "example.plan-progress.json"    # ensure nothing mastered
 _bak = _sp.read_text() if _sp.exists() else None
 try:
     _sp.unlink()
@@ -107,7 +107,7 @@ def _reason(out):
 
 
 ev_hs = {"hook_event_name": "PreToolUse", "tool_name": "Edit",
-         "tool_input": {"file_path": "/home/shiyil/mimo/loss.py", "new_string": "empty_loss_weight = 0.5"}}
+         "tool_input": {"file_path": "/home/user/proj/loss.py", "new_string": "empty_loss_weight = 0.5"}}
 out_hs = router.decide(ev_hs)
 check(_pd(out_hs) == "deny",
       "hard gate: high-stakes un-drilled tool action is BLOCKED (permissionDecision deny)")
@@ -118,7 +118,7 @@ ev_clear = {"hook_event_name": "PreToolUse", "tool_name": "Bash",
 check(_pd(router.decide(ev_clear)) != "deny",
       "catch-22 guard: the `progress.py mark` command itself is never blocked by the gate")
 ev_lo = {"hook_event_name": "PreToolUse", "tool_name": "Write",
-         "tool_input": {"file_path": "/home/shiyil/mimo/eval_metric.py", "content": "aggregate accuracy top-1"}}
+         "tool_input": {"file_path": "/home/user/proj/eval_metric.py", "content": "aggregate accuracy top-1"}}
 check(_pd(router.decide(ev_lo)) != "deny",
       "non-high-stakes (eval-stage) work does NOT block")
 if _bak is not None:

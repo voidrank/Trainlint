@@ -22,7 +22,7 @@ ROOT = HERE.parent
 ACTION_FACTS = {
     "_comment": "Action-rule facts for <name>. EMPTY — /trainlint:plan fills these while "
                 "establishing context (it reads the project to learn the danger patterns). The "
-                "doorman stays silent on this project until then. See project.mimo.json for the "
+                "doorman stays silent on this project until then. See project.example.json for the "
                 "full key shape (bad_storage_re, locked_configs_re, preproc_trap_re, ...)."
 }
 
@@ -30,7 +30,7 @@ ACTION_FACTS = {
 # direction_regex make the research-lint degrade cleanly to an empty tree (no crash).
 RESEARCH_FACTS = {
     "_comment": "Research facts for <name> — /trainlint:plan fills runs_glob/direction_regex/"
-                "candidate_moves from the real run layout. See research/facts.mimo.json.",
+                "candidate_moves from the real run layout. See research/facts.example.json.",
     "thresholds": {"patience_P": 3, "window_K": 3, "flat_eps": 0.01},
     "runs_glob": "",
     "direction_regex": "",
@@ -61,7 +61,7 @@ def main():
       "# durable append-only annotation log (harvested from sessions). starts empty.\n")
     w(HERE / f"plan.{name}.jsonl",
       "# Project PLAN: the ordered DECISIONS that define this run, each tagged with the\n"
-      "# transferable PRINCIPLE that governs it. Draft it with /trainlint:plan. See plan.mimo.jsonl.\n"
+      "# transferable PRINCIPLE that governs it. Draft it with /trainlint:plan. See plan.example.jsonl.\n"
       "# fields: id | phase | decision | choice | principle | why | status(open|decided|verified) | match(regex)\n")
     w(HERE / f"goal.{name}.txt", "")
     (ROOT / ".active-project").write_text(name + "\n", encoding="utf-8")

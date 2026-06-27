@@ -173,7 +173,7 @@ Now it splits into three layers, the lower the more volatile:
    - `triggers.jsonl` SECTION 1 (**portable kernel**): process/diagnostic discipline, **zero facts**, usable as-is across projects.
    - `triggers.jsonl` SECTION 2 + `checks.jsonl`: **general principles**, with all project-specific strings written as `{{placeholders}}`.
 3. **Project facts** (`project.<name>.json`)—the fill-in-the-blank layer. `{{bad_storage_re}}`=`/jfs/|/nas/`,
-   `{{preproc_trap_re}}`=`MelSpectrogram\(...`, `{{frozen_component}}`=`MiMo audio tokenizer` …
+   `{{preproc_trap_re}}`=`MelSpectrogram\(...`, `{{frozen_component}}`=`the frozen audio tokenizer` …
 
 `facts.py` expands `{{...}}` into the current project's facts before they are used in match/inject/message.
 
@@ -224,8 +224,8 @@ hooks/classifier.py    stage2 intent sorting (currently regex fallback, awaiting
 hooks/facts.py         project facts loading + {{placeholder}} expansion
 hooks/router.py        orchestrator: merge three stages → land on a channel; fail-open; always exit 0
 triggers.jsonl         coach rules: SECTION1 portable kernel / SECTION2 general principles + {{facts}}
-project.mimo.json      MiMo's facts (fills {{placeholders}}); to switch projects, copy to project.<name>.json
-.active-project        (optional) write the project name; otherwise env HARNESS_PROJECT, otherwise default mimo
+project.example.json   the example project's facts (fills {{placeholders}}); to switch projects, copy to project.<name>.json
+.active-project        (optional) write the project name; otherwise env HARNESS_PROJECT, otherwise default example
 tests/                 must run when adding rules; cases.jsonl is the behavior snapshot
 ```
 
@@ -233,7 +233,7 @@ tests/                 must run when adding rules; cases.jsonl is the behavior s
 
 The rules don't change, only the facts do:
 
-1. `cp project.mimo.json project.<new project>.json`, fill each key with the new project's facts
+1. `cp project.example.json project.<new project>.json`, fill each key with the new project's facts
    (frozen component, unreliable-storage regex, preprocessing-trap regex, reference implementation, locked-config regex …).
 2. `echo <new project> > .active-project` (or set `HARNESS_PROJECT`).
 3. Keep `triggers.jsonl` SECTION 1 (process/diagnostics) as-is; if SECTION 2 + `checks.jsonl` have

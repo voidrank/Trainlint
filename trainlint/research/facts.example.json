@@ -1,8 +1,8 @@
 {
   "_comment": "Per-project research facts. Mechanism (tree/governor/surfacer) is general; this tells it how to read THIS project's traces and what its move-set / trunk-checks are. To port: write facts.<name>.json + knowledge.<name>.jsonl + log.<name>.jsonl.",
   "thresholds": { "patience_P": 3, "window_K": 3, "flat_eps": 0.01 },
-  "runs_glob": "/mnt/minio/shiyil/mimo/runs/dup_*",
-  "direction_regex": "dup_(d3v[0-9]+[a-z]*)(?:_([A-Za-z0-9]+))?",
+  "runs_glob": "/path/to/runs/dup_*",
+  "direction_regex": "dup_(run[0-9]+[a-z]*)(?:_([A-Za-z0-9]+))?",
   "trunk_checks": ["diff-vs-base", "verify-data-distribution", "trained-enough-epochs", "power=1.0"],
   "candidate_moves": ["loss-weights", "freeze", "nofreeze", "layout-stream", "layout-chunk", "lr", "empty-loss-weight", "epochs", "eff-batch", "onset-floor", "asst-history-dropout"]
 }

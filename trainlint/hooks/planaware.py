@@ -95,7 +95,7 @@ def assess(data):
     # ANTI-PRIOR WATCH — catch the agent drifting toward an explicitly REJECTED option, on ANY
     # action (not just ones that touch the decision's topic). NOT deduped: it fires every time the
     # agent drifts, because the whole job is to keep correcting a strong prior the user already
-    # rejected ("use megafish, not MiMo's codec" / "fresh-from-base, not resume a duplex ckpt").
+    # rejected ("build on repo A, not repo B's codec" / "fresh-from-base, not resume a prior ckpt").
     # Coach-level — agent-facing, never blocks (the user already said it; the AGENT needs reminding).
     for d in full:
         nr = d.get("not_re")

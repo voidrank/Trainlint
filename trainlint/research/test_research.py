@@ -20,9 +20,9 @@ def main():
         if not cond:
             fails += 1
 
-    facts = tree.load_facts("mimo")
+    facts = tree.load_facts("example")
     # build from the durable log only (structured derive degrades to [] off-cluster)
-    nodes = tree.build_tree(tree.load_annotations("mimo"), facts)
+    nodes = tree.build_tree(tree.load_annotations("example"), facts)
 
     check("loss-weights" in nodes, "loss-weights direction reconstructed")
     check(nodes["loss-weights"]["status"] == "stalled",
@@ -38,15 +38,15 @@ def main():
     check("unexplored" in gov and not prescribes,
           "governor surfaces unexplored moves and never PRESCRIBES abandonment (lint, not prune)")
 
-    know = tree._load_jsonl(Path(__file__).resolve().parent / "knowledge.mimo.jsonl")
+    know = tree._load_jsonl(Path(__file__).resolve().parent / "knowledge.example.jsonl")
     surf = "\n".join(surfacer.report(nodes, know))
     check("frozen-codec" in surf or "context-dependent" in surf,
           "surfacer couples the 351-OOD wall to the frozen-tokenizer entry")
     check("Inner Monologue" in surf, "surfacer couples the 'rambling' wall to Moshi inner-monologue")
 
     # --- plan artifact: the decision floor-plan both machines consume ---
-    pl = plan.load("mimo")
-    check(len(pl) >= 10, f"plan.mimo loaded ({len(pl)} decisions)")
+    pl = plan.load("example")
+    check(len(pl) >= 10, f"plan.example loaded ({len(pl)} decisions)")
     check(all(n.get("id") and n.get("decision") and n.get("principle")
               and n.get("status") in plan.STATUSES for n in pl),
           "every plan decision has id + decision + principle + a valid status")
@@ -57,7 +57,7 @@ def main():
     check(plan.by_id(pl, "eval-protocol")["principle"] == "free-running-not-teacher-forced-is-the-test",
           "eval-protocol decision is governed by the free-running principle (the audit's central miss)")
     s = plan.summary(pl)
-    check(sum(s["counts"].values()) == len(pl) and plan.brief("mimo").startswith("plan:"),
+    check(sum(s["counts"].values()) == len(pl) and plan.brief("example").startswith("plan:"),
           "plan.summary/brief account for every decision")
     # main thread = the load-bearing open decision (the compass's focus), not just the first open
     mt = plan.main_thread(pl)

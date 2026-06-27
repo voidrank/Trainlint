@@ -95,7 +95,7 @@ def _texts(path):
                     yield ts, p.get("text", "")
 
 
-def harvest(path, name="mimo"):
+def harvest(path, name="example"):
     logp = ROOT / f"log.{name}.jsonl"
     seen = set()
     if logp.exists():
@@ -134,10 +134,10 @@ def _main():
     try:
         if len(sys.argv) >= 2 and not sys.argv[1].startswith("-"):
             path = sys.argv[1]
-            name = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("HARNESS_PROJECT", "mimo")
+            name = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("HARNESS_PROJECT", "example")
         else:
             path = (json.load(sys.stdin) or {}).get("transcript_path", "")
-            name = os.environ.get("HARNESS_PROJECT", "") or "mimo"
+            name = os.environ.get("HARNESS_PROJECT", "") or "example"
         if path:
             print(f"harvested {harvest(path, name)} new annotation(s)")
     except Exception:
