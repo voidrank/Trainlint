@@ -64,6 +64,10 @@ def main():
       "# transferable PRINCIPLE that governs it. Draft it with /trainlint:plan. See plan.example.jsonl.\n"
       "# fields: id | phase | decision | choice | principle | why | status(open|decided|verified) | match(regex)\n")
     w(HERE / f"goal.{name}.txt", "")
+    # motivation.<name>.txt — the optional "why this matters" beat the viz report leads with at
+    # the PLANNING stage (before any experiment). Empty stub: viz omits the beat until /plan
+    # fills it. Must stay empty (viz renders the whole file as prose — a comment would show up).
+    w(HERE / f"motivation.{name}.txt", "")
     (ROOT / ".active-project").write_text(name + "\n", encoding="utf-8")
     print(f"\nregistered '{name}' and set it active. Empty substrate created — nothing to "
           f"hand-fill.\nNext: run `/trainlint:plan` — it establishes the full project context, "
