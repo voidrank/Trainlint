@@ -196,10 +196,26 @@ def assess(data):
                                       f"«{decision}» (principle: {princ}).{why} "
                                       f"Decide/confirm it before proceeding.{gate}")})
         elif status == "decided":
-            items.append({"level": "coach", "plan_decision": did,
-                          "message": (f"⟦plan:{did}⟧ decided but UNVERIFIED — «{decision}» → "
-                                      f"{choice} (principle: {princ}).{why} "
-                                      f"Make the code match the choice, then verify it holds.{gate}")})
+            # decided≠built: a choice typed (decided) is not the same as code/data on disk (built).
+            # Fork the coaching so the agent drives the RIGHT next step instead of treating a paper
+            # choice as if the work were done.
+            try:
+                is_built = planlib.artifact_exists(d)
+            except Exception:
+                is_built = False
+            if is_built:
+                items.append({"level": "coach", "plan_decision": did,
+                              "message": (f"⟦plan:{did}⟧ built but UNVERIFIED — «{decision}» → "
+                                          f"{choice} (principle: {princ}).{why} The artifact exists; "
+                                          f"now VERIFY it holds (run it / check the result), then mark "
+                                          f"verified.{gate}")})
+            else:
+                items.append({"level": "coach", "plan_decision": did,
+                              "message": (f"⟦plan:{did}⟧ decided ON PAPER, NOT BUILT — «{decision}» → "
+                                          f"{choice} (principle: {princ}).{why} A choice is typed but no "
+                                          f"artifact exists on disk. BUILD it, then name the artifact on "
+                                          f"the decision (`\"artifact\": \"...\"`) so it counts as built — "
+                                          f"then verify.{gate}")})
         else:  # verified
             items.append({"level": "coach", "plan_decision": did,
                           "message": (f"⟦plan:{did}⟧ settled decision — «{decision}» → {choice} "

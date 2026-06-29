@@ -21,9 +21,13 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import tree      # noqa: E402
-import lint      # noqa: E402  (lint.brief)
-import plan      # noqa: E402  (plan.brief — the project's decision floor-plan)
+import tree       # noqa: E402
+import lint       # noqa: E402  (lint.brief)
+import plan       # noqa: E402  (plan.brief — the project's decision floor-plan)
+try:
+    import goalcheck  # noqa: E402  (goal ↔ decisions scope-drift warning)
+except Exception:  # pragma: no cover
+    goalcheck = None
 
 STATE = HERE / ".state"
 
@@ -69,6 +73,10 @@ def context_briefing(name, nodes):
         mt = plan.main_thread(pl)
         tail = f" — MAIN THREAD (drive this next): {mt['decision']}" if mt else " — all decisions settled"
         parts.append(plan.brief(name) + tail)
+        if goalcheck is not None:
+            gd = goalcheck.brief(name)
+            if gd:
+                parts.append(gd)
     else:
         # backstop: a registered project (init ran -> facts/project files exist) with an empty plan
         # means the plan was "started but never written". Flag it prominently — deterministic, every
@@ -112,6 +120,17 @@ def _compass(name):
         # the text/audio interleave) silently drops out of view the way a one-line goal collapses it.
         bits.append("🧱 pillars (keep ALL in view, even settled ones): "
                     + " · ".join(p.get("id", "") for p in pil))
+    if pl:
+        # decided≠built — the truth the surfaces used to hide. Keep it in front of the agent every
+        # turn: a decision that's 'decided on paper' (a choice typed, no artifact on disk) has NOT
+        # moved the project. This is what stops 8/9-decided-0-built reading as 'almost done'.
+        s = plan.summary(pl)
+        paper = len(s.get("paper_only", []))
+        if paper:
+            bits.append(f"📐 built so far: {s['decided_built']}/{s['counts'].get('decided', 0)} "
+                        f"decided decisions have produced an artifact — {paper} are decided on PAPER "
+                        f"only (choice typed, nothing on disk). decided≠built: until a decision "
+                        f"produces something, drive it, don't count it as done")
     if mt:
         bits.append("main thread (drive this, don't wander): " + mt.get("decision", ""))
     if av:
@@ -119,6 +138,12 @@ def _compass(name):
         # drifting back toward. Kept in front of the agent every turn so the prior can't win.
         bits.append("⛔ already rejected (don't drift back): "
                     + "; ".join(a["not_this"] for a in av if a.get("not_this")))
+    if goalcheck is not None:
+        # GOAL↔scope drift: a decision dropped something from scope but the goal still claims it.
+        # Surfaced every turn so the north star can't quietly point at an out-of-scope target.
+        gd = goalcheck.brief(name)
+        if gd:
+            bits.append(gd)
     # standing grounding discipline — always on (this fires worst on unfamiliar code, where there
     # may be no goal/thread yet): research truth is in the specific code, not your prior.
     bits.append("🔎 ground every claim in file:line; if you don't know, write UNKNOWN and go READ — "

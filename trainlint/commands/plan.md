@@ -91,6 +91,15 @@ Present this full picture to me FIRST and let me correct it.
    touches this decision). **WRITE each decision to `research/plan.<name>.jsonl` AS YOU CONFIRM IT —
    incrementally, not all at the end** (keep the header comment). So if the conversation diverges,
    the progress already on disk survives — the plan is never "started but unwritten".
+   **`decided` ≠ built.** `decided` means a choice is TYPED with a rationale — it does NOT mean
+   anything was made. A decision counts as **built** only when it names an `"artifact"` (a path/glob
+   the choice produces) AND that artifact exists on disk; the surfaces show built-of-decided (`0/8
+   built`) and paint a decided-but-artifact-less decision `✎` (paper), not `●` (built). So when a
+   decision's choice is the kind that should PRODUCE something (a script, a dataset, a config), give
+   it an `"artifact"` now (even before it exists) so "is it built yet?" is a fact on disk, not a vibe.
+   If a choice NARROWS the project's scope, also add `"scope_drop": ["<phrase removed>", ...]` — the
+   goal↔scope checker flags any dropped phrase still present in `goal.<name>.txt`, so the north star
+   can't keep advertising a target a decision already abandoned (the multi-track→text-only scar).
    Mark exactly ONE decision `"load_bearing": true` — the open decision that most gates the rest
    (the cheapest test that could invalidate the whole plan). That one becomes the **main thread**.
    Also mark the **2-4 PILLARS** `"pillar": true` — the project's CORE dimensions, the things it
@@ -144,12 +153,15 @@ Present this full picture to me FIRST and let me correct it.
       that is talking *about* the report instead of giving it. Just explain.
 
    Then lay it out in this order (layered, but don't announce the layers):
-   - **What we're building + where it stands** — one plain sentence, then `<N>/<total> decided ·
-     <k> pillars · main thread → <plain name of the load_bearing decision>`.
+   - **What we're building + where it stands** — one plain sentence, then `<built>/<decided> built ·
+     <V> verified · <k> pillars · main thread → <plain name of the load_bearing decision>`. Lead with
+     built-of-decided, not a bare decided count — "0/8 built" is the honest state; "8 decided" reads
+     as almost-done when nothing's been made. (The report doorman bounces a plan walk that hides this.)
    - **The map** — the phase-grouped skeleton from `python3 research/plan.py` (don't hand-format it).
-     A picture of the whole shape, not a list of options to pick from.
+     A picture of the whole shape, not a list of options to pick from. (`✎` = decided on paper, `●` = built.)
    - **What's locked** — each `decided` one in a sentence: its plain meaning, what we chose, and (if it
-     carries an anti-prior) what we ruled out and why. The foundation I can trust.
+     carries an anti-prior) what we ruled out and why. Say which are actually BUILT (artifact on disk)
+     vs decided on paper — don't let a paper choice read as foundation. The foundation I can trust.
    - **The one thing everything waits on** — expand ONLY the `load_bearing` decision: the real problem
      in plain words, the concrete reason it gates the rest, and the cheapest test that could kill it.
    - **Next, and drive it** — one concrete action to settle that, then GO DO IT (propose the move and

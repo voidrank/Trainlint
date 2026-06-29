@@ -37,11 +37,30 @@ motion, not a menu. The doorman is live the whole time: if the action drifts tow
 (the `not_re` patterns) or breaks a frozen contract, it will steer or bounce — that is the system
 working, not a failure.
 
+**One confirmation gate — the load_bearing decision only.** Trunk-checks, verifies, and every
+non-load-bearing open decision stay fully autonomous: drive them, mark them, and flag them in the
+report (§4) — no pop-up. But the `load_bearing` decision is the one that gates the whole plan, so it
+does NOT get flipped `open → decided` silently. The moment your move produces a result that would
+settle it, STOP and confirm the choice with me through the **`AskUserQuestion` tool** (one option
+paraphrasing the result-backed choice, the plausible alternatives, "Other" for free-text) before you
+write `decided`. This is the only place execute-and-report pauses for me — everything else keeps
+moving. (Run the move first; the pop-up confirms the *conclusion*, it doesn't ask permission to start.)
+
 ## 3. Record the outcome back into the plan
 When the move produces a result, close the loop — don't leave the plan stale:
 - Update the target decision in `research/plan.<name>.jsonl`: `open → decided` once the move picks a
   `choice` (write the choice + a one-line `why` grounded in the result), or `decided → verified` once
-  a run confirms it. Never mark `verified` on a guess — only on an observed result.
+  a run confirms it. Never mark `verified` on a guess — only on an observed result. For the
+  `load_bearing` decision, only write `decided` AFTER the `AskUserQuestion` confirmation from §2 comes
+  back — every other decision you mark as soon as the result lands.
+- **If the move PRODUCED something durable, record it as the decision's `"artifact"`** (the path/glob
+  of the script/dataset/config it made). `decided` is just a typed choice; a decision is **built**
+  only when its artifact exists on disk. Naming it is what flips the surfaces from `✎` (paper) to `●`
+  (built) and moves built-of-decided off zero — so an honest "we decided 8 things and built 0" can't
+  hide. If the move only measured/read/reasoned (no durable output), leave `artifact` unset: it's
+  decided-on-paper, and that's exactly what the next run must turn into something.
+- **If this move NARROWED scope**, add `"scope_drop": ["<phrase removed>", ...]` to the decision so
+  the goal↔scope checker catches a `goal.txt` DONE line still advertising what you just dropped.
 - Harvest the run into the search tree so the lint can see it:
   `python3 "${CLAUDE_PLUGIN_ROOT}/research/harvest.py"` (it reads `runs_glob`/`direction_regex` from
   the facts). A move that produced no logged run just doesn't show as a tree node — that's fine.
@@ -66,9 +85,15 @@ with — and the `Stop` report-doorman enforces them here too):
 4. Concrete numbers beat abstract principles — lead the *why* with the mechanism/number.
 5. Cut the ceremony — no BLUF, no legends; just explain.
 
-Lay it out: **what we just did + what it settled** → **where the plan stands now** (`<N>/<total>
-decided · the new main thread`) → **the map** (the phase-grouped skeleton from `plan.py`, wrapped in
-prose) → **the next thing everything now waits on**, and drive it. End in motion.
+Lay it out: **what we just did + what it BUILT** (name the artifact this run produced, or say plainly
+it only measured/decided and built nothing — don't let a measurement read as progress toward a built
+thing) → **what got decided/built THIS run** (an explicit list of every decision you flipped `open →
+decided`/`verified` this turn, each with its result-backed `choice` in one line, and which now have an
+artifact on disk — so the autonomous moves are never invisible; if you confirmed the load_bearing one
+via pop-up, say so) → **where the plan stands now** (`<built>/<decided> built · <V> verified · the new
+main thread` — lead with built, not a bare decided count; and if the goal↔scope checker is warning,
+say so and fix `goal.txt`) → **the map** (the phase-grouped skeleton from `plan.py`, wrapped in prose;
+`✎`=paper, `●`=built) → **the next thing everything now waits on**, and drive it. End in motion.
 
 To absorb browser-side learnings back into the substrate (glossary terms + Q&A a viewer captured):
 `python3 "${CLAUDE_PLUGIN_ROOT}/research/viz.py" <project> --absorb <viz-memory.json>` — glossary terms

@@ -45,6 +45,16 @@ TREE_EDGE = {"open": "#94a3b8", "deepening": "#3b82f6", "stalled": "#d97706",
              "abandoned": "#dc2626", "won": "#16a34a"}
 DEC_ICON = {"verified": "✓", "decided": "◐", "open": "○"}
 DEC_COLOR = {"verified": "#16a34a", "decided": "#d97706", "open": "#64748b"}
+
+
+def _dec_glyph(n):
+    """(glyph, color) for a decision in the spine. Splits `decided` into BUILT (◐) vs decided-on-
+    PAPER (✎) via plan.artifact_exists, so the one-glance spine never paints an unbuilt choice the
+    same as one that produced an artifact."""
+    st = n.get("status", "open")
+    if st == "decided" and not plan.artifact_exists(n):
+        return ("✎", "#b45309")
+    return (DEC_ICON.get(st, "?"), DEC_COLOR.get(st, "#64748b"))
 KIND = {  # (glyph, color, label)
     "experiment": ("●", "#2563eb", "experiment"),
     "wall":       ("⚠", "#d97706", "wall"),
@@ -942,14 +952,22 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
                  "the project as one story: want · problem · bottleneck · did · next</div>")
         H.append(story_html(goal, bar, pl, nodes, rows))
     H.append("<div class='score'><div class='dots'>" + _dots(counts) + "</div>"
-             f"<div class='lbl'>{counts.get('verified',0)} verified · {counts.get('decided',0)} decided · "
-             f"{counts.get('open',0)} open  ({summ['total']} decisions)</div></div>")
+             f"<div class='lbl'>{summ.get('decided_built',0)}/{counts.get('decided',0)} decided built · "
+             f"{counts.get('verified',0)} verified · {counts.get('open',0)} open  "
+             f"({summ['total']} decisions)</div></div>")
     if pillars:
         H.append("<div class='chips'>" + "".join(
             f"<span class='chip pillar'>◆ {_e(p['id'])}</span>" for p in pillars) + "</div>")
     if avoided:
         H.append("<div class='rej'><b>don't drift back:</b> " +
                  " · ".join(_e(a["not_this"]) for a in avoided if a.get("not_this")) + "</div>")
+    try:
+        import goalcheck as _gc  # noqa: E402
+        _gd = _gc.brief(name)
+    except Exception:
+        _gd = ""
+    if _gd:
+        H.append("<div class='rej'><b>⚠️ goal↔scope drift:</b> " + _e(_gd) + "</div>")
     H.append("</div>")  # hdr
 
     # ---- pipeline (the system, phase by phase) ----
@@ -962,13 +980,13 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
     # ---- legend ----
     if planning:
         H.append("<div class='legend'>"
-                 "<span><b>decisions</b> ✓ verified ◐ decided ○ open</span>"
+                 "<span><b>decisions</b> ✓ verified ◐ decided+built ✎ decided on paper (not built) ○ open</span>"
                  "<span>◆ pillar — a core dimension the project always rests on</span>"
                  "<span>★ main thread — the one decision to settle next</span>"
                  "<span>click a decision to see its principle (or ask its chatbot)</span></div>")
     else:
         H.append("<div class='legend'>"
-                 "<span><b>spine</b> ✓ verified ◐ decided ○ open</span>"
+                 "<span><b>spine</b> ✓ verified ◐ decided+built ✎ decided on paper (not built) ○ open</span>"
                  "<span><b>tree</b> ⚠ open problem · ✓ wall closed · ◆ tested · ↩ backtracked · ● decided · ○ idea</span>"
                  "<span><b>edges</b> ⚠ wall → 📖 paper it unlocks</span>"
                  "<span>click a decision to see its principle</span></div>")
@@ -1010,8 +1028,9 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
             st = n.get("status", "open")
             you = "<span class='you'>← you are here</span>" if (mt and n.get("id") == mt.get("id")) else ""
             pl_tag = "<span class='pill-tag'>◆ pillar</span>" if n.get("pillar") else ""
+            _g, _c = _dec_glyph(n)
             spine.append("<details class='dec'><summary>"
-                         f"<span class='gl' style='color:{DEC_COLOR.get(st,'#64748b')}'>{DEC_ICON.get(st,'?')}</span>"
+                         f"<span class='gl' style='color:{_c}'>{_g}</span>"
                          f"<span class='dsum'><span class='dq'>{_gloss(_e(n.get('decision','')), gmap)}</span>{you}{pl_tag}"
                          f"<br><span class='dch'>→ {_gloss(_e(n.get('choice','')), gmap)}</span></span></summary>"
                          f"<div class='dwhy'><span class='pr'>{_e(n.get('principle',''))}</span> "
@@ -1056,9 +1075,23 @@ SLIDES_CSS = """
 html,body{margin:0;height:100%;background:#0b1220;color:#cbd5e1;overflow:hidden}
 .deck{height:100vh;width:100vw;position:relative}
 .slide{position:absolute;inset:0;display:none;flex-direction:column;
-  padding:34px 48px;box-sizing:border-box;overflow-y:auto;font-size:18px}
+  padding:34px 48px;box-sizing:border-box;overflow:hidden;font-size:18px}
 .slide.active{display:flex}
 .slide.cover{justify-content:center;align-items:center;text-align:center}
+/* deck-theme-scope: the report's base .card{#fff}/.tl/.gl-* are reused verbatim and would
+   render as white boxes on the dark deck. Re-skin them DARK *only* under .slide, so the report
+   (render_html) keeps its light theme byte-for-byte. */
+.slide .card{background:#0f172a;border-color:#1e293b;color:#cbd5e1}
+.slide .phase{color:#7dd3fc}
+.slide .tl .row{border-bottom-color:#1e293b}
+.slide .tl .date,.slide .tl .knd,.slide .pp-s,.slide .dch{color:#94a3b8}
+.slide .tl .note,.slide .dq{color:#e2e8f0}
+.slide .pp-stage{background:#0f172a;border-color:#1e293b}
+.slide .pp-t{color:#e2e8f0}
+.slide .dwhy,.slide .gl-row{color:#cbd5e1;border-top-color:#1e293b}
+.slide .pr{background:#1e293b;color:#cbd5e1}
+.slide .gl-box{background:#0f172a;border-color:#1e293b}.slide .gl-box summary{color:#e2e8f0}
+.slide .dec-flat{border-bottom-color:#1e293b}
 .slide h1{font-size:42px;color:#e2e8f0;margin:0 0 6px}
 .slide h2.sec{font-size:24px;color:#e2e8f0;margin:0 0 16px}
 .cover-goal{font-size:27px;color:#e2e8f0;margin:18px 0;max-width:84%;line-height:1.45}
@@ -1081,8 +1114,16 @@ html,body{margin:0;height:100%;background:#0b1220;color:#cbd5e1;overflow:hidden}
 DECK_JS = """
 (function(){var s=[].slice.call(document.querySelectorAll('.slide')),i=0,
 c=document.getElementById('deck-cnt');
+// slide-fit-strategy: build-time (Python) can't know rendered height, so GUARANTEE fit at
+// runtime — shrink the slide's font until it no longer overflows its own box (or hits a floor).
+// Measured per slide, memoized; this is what makes "no slide scrolls" a guarantee, not a guess.
+function fit(el){if(el.dataset.fit)el.style.fontSize=el.dataset.fit;else el.style.fontSize='';
+  var fs=parseFloat(getComputedStyle(el).fontSize),min=fs*0.55,g=0;
+  while(el.scrollHeight>el.clientHeight+1&&fs>min&&g++<60){fs-=1;el.style.fontSize=fs+'px';}
+  el.dataset.fit=fs+'px';}
 function show(n){i=Math.max(0,Math.min(s.length-1,n));
   s.forEach(function(el,k){el.classList.toggle('active',k===i);});
+  fit(s[i]);
   if(c)c.textContent=(i+1)+' / '+s.length;
   if(('#'+(i+1))!==location.hash)history.replaceState(null,'','#'+(i+1));}
 function go(d){show(i+d);}
@@ -1157,14 +1198,16 @@ def render_slides(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_
             you = ("<span class='you'>← you are here</span>"
                    if (mt and n.get("id") == mt.get("id")) else "")
             pl_tag = "<span class='pill-tag'>◆ pillar</span>" if n.get("pillar") else ""
+            _g, _c = _dec_glyph(n)
             s.append("<div class='dec-flat'>"
-                     f"<span class='gl' style='color:{DEC_COLOR.get(st,'#64748b')}'>"
-                     f"{DEC_ICON.get(st,'?')}</span>"
+                     f"<span class='gl' style='color:{_c}'>{_g}</span>"
                      f"<span class='dsum'><span class='dq'>{_gloss(_e(n.get('decision','')), gmap)}"
                      f"</span>{you}{pl_tag}"
                      f"<br><span class='dch'>→ {_gloss(_e(n.get('choice','')), gmap)}</span>"
-                     f"<br><span class='dwhy'><span class='pr'>{_e(n.get('principle',''))}</span> "
-                     f"{_e(n.get('why',''))}</span></span></div>")
+                     # slide-content-altitude: the slide face shows decision + choice + a principle
+                     # tag only — the full why-paragraph (in the report) is dropped here so a dense
+                     # phase doesn't overflow; the why is destined for speaker notes (notes-source).
+                     f" <span class='pr'>{_e(n.get('principle',''))}</span></span></div>")
         s.append("</div>")
         secs.append(_sec("".join(s)))
 
@@ -1198,9 +1241,17 @@ def stdout_summary(name, goal, bar, pl, nodes, knowledge, htmlpath):
     mt = plan.main_thread(pl)
     rows = timeline_rows(tree.load_events(name, tree.load_facts(name)), knowledge)
     out = [f"# research tree ({name})  ·  {summ['total']} decisions "
-           f"[{c.get('verified',0)} verified / {c.get('decided',0)} decided / {c.get('open',0)} open]"]
+           f"[{summ.get('decided_built',0)}/{c.get('decided',0)} decided built · "
+           f"{c.get('verified',0)} verified · {c.get('open',0)} open]"]
     if goal:
         out.append(f"  goal : {_trunc(goal, 92)}")
+    try:
+        import goalcheck as _gc  # noqa: E402
+        _gd = _gc.brief(name)
+    except Exception:
+        _gd = ""
+    if _gd:
+        out.append("  " + _trunc(_gd, 160))
     if mt:
         out.append(f"  NOW  : {_trunc(mt.get('decision',''), 92)}  (main thread → {mt.get('id','')})")
     if rows:

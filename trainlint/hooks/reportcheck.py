@@ -159,6 +159,24 @@ def check(data):
                 and not re.search(r"\bviz\.[\w.-]*\.html\b", text, re.I):
             misses.append("the HTML sign-off — run `python3 research/viz.py <project>` and end on its "
                           "`HTML: <path>` line so I always have the one-glance report to open")
+        # F. the BUILT lens (decided≠built). The failure this whole gate exists to stop in reports:
+        # a plan sitting at 8/9 "decided" with nothing produced reads as almost-done. If ANY decision
+        # is decided-on-paper (a choice typed, no artifact on disk), a plan report must SAY so —
+        # surface built-of-decided, not a bare "decided" count. Only required when there's something
+        # paper-only to disclose (an all-verified/all-built report needn't mention it).
+        try:
+            paper_only = [d for d in planlib.load()
+                          if d.get("status") == "decided" and not planlib.artifact_exists(d)]
+        except Exception:
+            paper_only = []
+        if paper_only:
+            has_built_lens = (bool(re.search(r"\bbuilt\b", text, re.I))
+                              or "纸面" in text or "未造" in text or "没造" in text)
+            if not has_built_lens:
+                misses.append(
+                    f"the BUILT lens — {len(paper_only)} decision(s) here are decided on PAPER with no "
+                    f"artifact on disk; the report must surface built-of-decided (e.g. `0/8 built`) and "
+                    f"say what this run actually produced, not a bare `decided` count that reads as done")
 
         if not misses:
             return []

@@ -21,6 +21,7 @@ One JSONL line per decision:
 
 Pure & read-only. Degrades to [] when a project has no plan yet.
 """
+import glob as _glob
 import json
 import os
 import re
@@ -29,6 +30,72 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 STATUSES = ("open", "decided", "verified")
+
+
+def _artifact_specs(node):
+    """Raw artifact path/glob specs a decision declares to prove it was BUILT. A decision becomes
+    `built` not by typing a choice but by naming a DURABLE artifact (a file path or glob) that the
+    choice produced. Accepts a string, a list of strings, or a dict with 'path'/'glob'. A dict 'cmd'
+    is a runnable CHECK, not a static artifact, so it does NOT count toward `built` — proving a run
+    holds is exactly what the `verified` status is for. Returns [] when none declared."""
+    a = node.get("artifact")
+    if not a:
+        return []
+    out = []
+
+    def _add(x):
+        if isinstance(x, str) and x.strip():
+            out.append(x.strip())
+        elif isinstance(x, dict):
+            for k in ("path", "glob"):
+                v = x.get(k)
+                if isinstance(v, str) and v.strip():
+                    out.append(v.strip())
+
+    if isinstance(a, list):
+        for x in a:
+            _add(x)
+    else:
+        _add(a)
+    return out
+
+
+def artifact_exists(node, base=None):
+    """True iff the decision names a durable artifact AND at least one match exists on disk. Paths
+    resolve relative to `base` (default: the cwd — the project repo the operator runs from); absolute
+    paths are honored. This is the test that separates a DECIDED decision (a choice on paper) from a
+    BUILT one (a choice that produced something). Fail-open: any error -> False."""
+    specs = _artifact_specs(node)
+    if not specs:
+        return False
+    bases = []
+    if base:
+        bases.append(Path(base))
+    bases.append(Path.cwd())
+    for spec in specs:
+        try:
+            p = Path(spec)
+            if p.is_absolute():
+                if p.exists() or _glob.glob(spec):
+                    return True
+                continue
+            for b in bases:
+                if (b / spec).exists() or _glob.glob(str(b / spec)):
+                    return True
+        except Exception:
+            continue
+    return False
+
+
+def built(plan=None, name=None, base=None):
+    """Decisions that actually PRODUCED something — status decided/verified AND a declared artifact
+    that exists. The missing lens the whole workflow lacked: `decided` only means 'chosen on paper',
+    `built` means 'the code/data is on disk'. A plan can sit at 8/9 decided with 0 built — every fork
+    reasoned out, nothing made yet — and until now no surface said so."""
+    if plan is None:
+        plan = load(name)
+    return [n for n in plan
+            if n.get("status") in ("decided", "verified") and artifact_exists(n, base)]
 
 
 def _active(name=None):
@@ -124,9 +191,16 @@ def summary(plan=None, name=None):
     counts = {s: 0 for s in STATUSES}
     for n in plan:
         counts[n.get("status", "open")] = counts.get(n.get("status", "open"), 0) + 1
+    # `built` keys are SEPARATE from `counts` on purpose: counts must still sum to total (open +
+    # decided + verified), while built is an orthogonal lens (decided/verified WITH an artifact).
+    decided_built = [n for n in plan if n.get("status") == "decided" and artifact_exists(n)]
+    paper_only = [n for n in plan if n.get("status") == "decided" and not artifact_exists(n)]
     return {
         "total": len(plan),
         "counts": counts,
+        "built": len(built(plan)),
+        "decided_built": len(decided_built),
+        "paper_only": paper_only,
         "open": [n for n in plan if n.get("status", "open") == "open"],
         "unverified": [n for n in plan if n.get("status") == "decided"],
     }
@@ -140,12 +214,21 @@ def main_thread(plan=None, name=None):
     flat menu of every decision."""
     if plan is None:
         plan = load(name)
-    opens = [n for n in plan if n.get("status", "open") == "open"]
-    lb = [n for n in opens if n.get("load_bearing")]
+    # The load-bearing decision stays the thread until it is VERIFIED — typing a `choice` (decided),
+    # or even building it, does NOT retire it, because it is the cheapest test that could sink the
+    # whole plan. (The old code required it to be `open`, so the moment a choice was typed the thread
+    # jumped off it to the first remaining decision by file order — that's the bouncing main thread.)
+    lb = [n for n in plan if n.get("load_bearing") and n.get("status") != "verified"]
     if lb:
         return lb[0]
+    opens = [n for n in plan if n.get("status", "open") == "open"]
     if opens:
         return opens[0]
+    # Everything open is settled: drive the cheapest UNBUILT decided decision (a paper choice with no
+    # artifact) before a merely-unverified one — you BUILD before you verify.
+    unbuilt = [n for n in plan if n.get("status") == "decided" and not artifact_exists(n)]
+    if unbuilt:
+        return unbuilt[0]
     unver = [n for n in plan if n.get("status") == "decided"]
     return unver[0] if unver else None
 
@@ -180,10 +263,13 @@ def brief(name=None):
     plan = load(name)
     if not plan:
         return ""
-    c = summary(plan)["counts"]
+    s = summary(plan)
+    c = s["counts"]
+    # Lead with BUILT-of-decided — the honest one-glance state. "0/8 built" says, at a glance, that
+    # eight forks were chosen on paper and none produced anything yet; "verified" and "open" trail it.
     return (f"plan: {len(plan)} decisions "
-            f"({c.get('verified', 0)} verified / {c.get('decided', 0)} decided / "
-            f"{c.get('open', 0)} open)")
+            f"({s['decided_built']}/{c.get('decided', 0)} decided built · "
+            f"{c.get('verified', 0)} verified · {c.get('open', 0)} open)")
 
 
 if __name__ == "__main__":
@@ -202,6 +288,13 @@ if __name__ == "__main__":
     print(head)
     ICON = {"verified": "✓", "decided": "●", "open": "○"}
     width = max((len(n.get("id", "")) for n in pl), default=0)
+
+    def _mark(n):
+        # ✎ = decided on paper but NOT built (no artifact on disk) — the state the old map hid by
+        # showing every chosen fork as a solid ●. ● now means decided AND produced an artifact.
+        if n.get("status") == "decided" and not artifact_exists(n):
+            return "✎"
+        return ICON.get(n.get("status", "open"), "?")
     phases = []  # phases in first-appearance order — no hard-coded list, generic across projects
     for n in pl:
         if n.get("phase", "") not in phases:
@@ -211,8 +304,8 @@ if __name__ == "__main__":
         for n in pl:
             if n.get("phase", "") != ph:
                 continue
-            mark = ICON.get(n.get("status", "open"), "?")
+            mark = _mark(n)
             tags = ("★" if n.get("load_bearing") else " ") + ("◆" if n.get("pillar") else "")
             print(f"    {mark} {n.get('id',''):<{width}}  {tags}")
-    print("\n  ●=decided ○=open ✓=verified · ★=main thread ◆=pillar"
+    print("\n  ✓=verified ●=decided+built ✎=decided on paper (not built) ○=open · ★=main thread ◆=pillar"
           "  ·  detail: read research/plan.<name>.jsonl or /trainlint:plan")

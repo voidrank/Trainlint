@@ -3,6 +3,11 @@
 # "floor plan" the plan-quiz teaches from and the plan-aware doorman locates actions on.
 # fields: id | phase | decision | choice | principle | why | status(open|decided|verified) | match(regex)
 # principle ids link to quiz.jsonl (reuse one if it fits; coin a kebab id if not).
+# optional: "artifact": path/glob (or {"path":..}/{"glob":..}) the choice PRODUCES — a decision is
+#   BUILT only once status>=decided AND its artifact exists on disk. "decided" alone = chosen on paper;
+#   without an artifact it is NOT built (shown ✎, not ●). Name it when you make the thing.
+# optional: "scope_drop": ["phrase", ..] — scope this choice REMOVED. goalcheck flags any such phrase
+#   still present in goal.<name>.txt (the "goal still claims multi-track, but we went text-only" scar).
 {"id": "data-storage", "phase": "data", "decision": "Which storage do training workers read data from?", "choice": "minio (full-flash); never jfs", "principle": "verify-data-before-blaming-algorithm", "why": "jfs corrupts under concurrent reads -> garbage wav -> NaN -> backward illegal-mem that looks like a model bug", "status": "verified", "match": "/jfs/|/mnt/jfs|minio|data.?root|data.?dir|storage"}
 {"id": "dedup-split", "phase": "data", "decision": "How do we split train/val without leakage?", "choice": "dedup on the full (session, window) key, not session_id alone", "principle": "dedup-on-the-full-identity-key", "why": "one session is cut into many windows; dedup by session_id alone scatters its windows across train and val -> inflated eval", "status": "verified", "match": "dedup|train.?val|\\bsplit\\b|session.?id|leak"}
 {"id": "silence-padding", "phase": "preproc", "decision": "How do we fill the silent gaps between turns when synthesizing dialogue?", "choice": "NOT np.zeros — real recordings have floor noise; zeros are OOD", "principle": "frozen-component-contract", "why": "the frozen tokenizer never saw pure zeros -> maps them to a fixed garbage code (351), which became ~40% of training targets", "status": "verified", "match": "np\\.zeros|silence|\\bpad\\b|gap|fill"}
