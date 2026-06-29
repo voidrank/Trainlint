@@ -1,0 +1,8 @@
+{
+  "_comment": "Research facts for `proposals` — a meta/tooling project. There are no ML training runs to read, so runs_glob/direction_regex stay empty (the research-lint degrades to an empty tree, no crash). trunk_checks are the cheapest sanity checks before blaming the design.",
+  "thresholds": { "patience_P": 3, "window_K": 3, "flat_eps": 0.01 },
+  "runs_glob": "",
+  "direction_regex": "",
+  "trunk_checks": ["existing-plans-still-load", "viz-still-renders-one-project", "hooks-have-a-target-without-active-project"],
+  "candidate_moves": ["dir-per-repo", "id-suffix-filename", "single-manifest", "supersedes-pointer", "viz-index-tab", "viz-diff-view", "migrate-to-p001"]
+}
