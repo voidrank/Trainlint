@@ -112,6 +112,9 @@ def run(data, checks=None):
             # confirms "this IS model code" but leaves correctness to a human (check_model_code) is
             # NOT — it sets "machine_certain": false so a settled-decision downgrade can still apply.
             "certain": c.get("machine_certain", bool(c.get("verifier"))),
+            # a deliberate, scar-backed guard that must reach the user even near a settled
+            # decision (it is not a stray keyword hit) — exempt it from the plan downgrade
+            "sticky": bool(c.get("sticky")),
             "message": facts.expand(msg_override or c.get("message", "")),
         })
     return out

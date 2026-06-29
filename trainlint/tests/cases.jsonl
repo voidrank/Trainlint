@@ -13,10 +13,10 @@
 {"desc": "send a wav -> coach (demo rule)", "event": {"hook_event_name": "PreToolUse", "tool_name": "SendUserFile", "tool_input": {"files": ["/x/ex0_demo.wav"]}}, "expect_channel": "coach", "expect_contains": ["through the model"]}
 #
 # --- stage 3 reject (machine-certain, silent bounce) ---
-{"desc": "sbatch on jfs -> deny", "event": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "sbatch --data_root /jfs/shiyil/codes train.sbatch"}}, "expect_channel": "deny", "expect_contains": ["JFS", "minio"]}
 {"desc": "edit locked ds_config -> deny", "event": {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": "/mnt/minio/x/deepspeed_zero2.json", "new_string": "\"scheduler\": {}"}}, "expect_channel": "deny", "expect_contains": ["LOCKED"]}
 #
 # --- stage 3 escalate (human-verify the actual code) ---
+{"desc": "sbatch on jfs -> escalate (denylist is a human call, not machine-certain)", "event": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "sbatch --data_root /jfs/shiyil/codes train.sbatch"}}, "expect_channel": "escalate", "expect_contains": ["JFS", "minio"]}
 {"desc": "attention mask edit -> escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": "/x/duplex/model.py", "new_string": "attn = attention_mask * causal_mask"}}, "expect_channel": "escalate", "expect_contains": ["forward", "check"]}
 {"desc": "mel without power=1.0 -> escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/encode.py", "content": "m = MelSpectrogram(sample_rate=24000, n_mels=128)"}}, "expect_channel": "escalate", "expect_contains": ["power=1.0"]}
 {"desc": "mel WITH power=1.0 -> suppressed (codec coach only)", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/encode.py", "content": "m = MelSpectrogram(sample_rate=24000, power=1.0)"}}, "expect_channel": "coach", "expect_contains": ["codec"]}

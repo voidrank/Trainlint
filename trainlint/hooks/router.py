@@ -70,7 +70,8 @@ def decide(data):
     # surfaced once per session per decision. Then DOWNGRADE: if the action's decision
     # is settled (verified), a keyword-only (non-certain, non-plan) escalation is most
     # likely a false alarm — turn it into a coach so the human isn't interrupted. A
-    # machine-certain (verifier-backed) item is never downgraded.
+    # machine-certain (verifier-backed) item, or one flagged keep_escalate (a deliberate
+    # scar-backed guard that must reach the user, not a stray keyword), is never downgraded.
     plan_items, located = planaware.assess(data)
     items = items + plan_items
     if any(d.get("status") == "verified" for d in located):
