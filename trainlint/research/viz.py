@@ -24,6 +24,7 @@ MOTIVATION (from motivation.<name>.txt) · GOAL (总分总) · MAIN THREAD · NE
 decision spine, and SUPPRESSES the timeline, search tree, and pipeline band (all empty/abstract
 at this stage). A project graduates to the mature view automatically once it logs its first event.
 """
+import hashlib
 import html
 import json
 import re
@@ -500,12 +501,79 @@ CHAT_JS = r"""
     var k=document.createElement('button'); k.textContent='🔑 Set API key';
     k.onclick=function(){var v=prompt('Anthropic API key (stored only in this browser):',localStorage.getItem(KK)||'');if(v!=null)localStorage.setItem(KK,v.trim());};
     var ex=document.createElement('button'); ex.textContent='⬇ Export memory';
-    ex.onclick=function(){var m=mem(),blob={project:DATA.project,faq:m.faq||{},glossary:m.glossary||[]};
+    ex.onclick=function(){var m=mem(),blob={project:DATA.project,faq:m.faq||{},glossary:m.glossary||[],mastered:m.mastered||{}};
       var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(blob,null,2)],{type:'application/json'}));
       a.download='viz-memory.'+DATA.project+'.json';a.click();};
     bar.appendChild(k); bar.appendChild(ex); document.body.appendChild(bar);
   }
   document.querySelectorAll('.tl-chat').forEach(initWidget); toolbar();
+})();
+"""
+
+
+# --- per-decision QUIZ: CSS + JS (offline, no API key) -------------------------------
+# A graded multiple-choice drill under every decision, mirroring the terminal /trainlint:quiz
+# but in the browser: question + options come baked in the tl-data blob (from quiz.jsonl by
+# principle), grading is client-side against the baked correct index, and a pass is recorded to
+# the SAME localStorage memory the chatbot uses (`mastered` map) — so "Export memory" + `viz
+# --absorb` clears the very gate the terminal quiz clears. Zero network, zero deps.
+QUIZ_CSS = """
+.tl-quiz{margin:6px 0 4px 24px}
+.tl-qbox{border:1px solid #e2e8f0;border-radius:10px;background:#fcfdff;overflow:hidden}
+.tl-qhead{padding:8px 10px;font-size:12.5px;border-bottom:1px solid #eef2f7;background:#f8fafc}
+.tl-qmark{font-size:10.5px;font-weight:700;letter-spacing:.04em;color:#6366f1;margin-right:6px}
+.tl-qmark.done{color:#16a34a}
+.tl-qq{color:#0f172a;font-weight:600}
+.tl-qopts{display:flex;flex-direction:column;gap:6px;padding:9px 10px}
+.tl-qopt{text-align:left;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;color:#1e293b;cursor:pointer;line-height:1.4}
+.tl-qopt:hover:not(:disabled){background:#eef2ff;border-color:#a5b4fc}
+.tl-qopt:disabled{cursor:default;opacity:.92}
+.tl-qopt.ok{border-color:#16a34a;background:#dcfce7;color:#14532d;font-weight:600}
+.tl-qopt.bad{border-color:#dc2626;background:#fee2e2;color:#7f1d1d}
+.tl-qwhy{padding:0 10px 9px;font-size:12.5px;line-height:1.5;color:#334155}
+.tl-qwhy b{color:#0f172a}
+.tl-qretry{margin:0 10px 10px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:3px 10px;font-size:11.5px;cursor:pointer;color:#475569}
+.tl-qretry:hover{background:#f1f5f9}
+"""
+
+# Plain string (own braces/backticks). Reads the same <script id="tl-data"> blob as the chatbot.
+QUIZ_JS = r"""
+(function(){
+  var el=document.getElementById('tl-data'); if(!el) return;
+  var DATA=JSON.parse(el.textContent);
+  var LS='trainlint_mem_'+DATA.project;
+  function mem(){try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return{}}}
+  function setMem(m){localStorage.setItem(LS,JSON.stringify(m))}
+  function esc(s){return (s==null?'':String(s)).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+  function init(node){
+    var decId=node.getAttribute('data-dec'), dec=DATA.decisions[decId]; if(!dec||!dec.quiz) return;
+    var Q=dec.quiz, done=!!((mem().mastered||{})[decId]);
+    node.innerHTML='';
+    var box=document.createElement('div'); box.className='tl-qbox';
+    var head=document.createElement('div'); head.className='tl-qhead';
+    head.innerHTML="<span class='tl-qmark"+(done?" done":"")+"'>"+(done?'✓ MASTERED':'? QUIZ')+"</span><span class='tl-qq'>"+esc(Q.q)+"</span>";
+    box.appendChild(head);
+    var opts=document.createElement('div'); opts.className='tl-qopts'; var answered=false;
+    Q.options.forEach(function(opt,i){
+      var b=document.createElement('button'); b.className='tl-qopt'; b.type='button'; b.textContent=opt;
+      b.addEventListener('click',function(e){
+        e.preventDefault(); if(answered) return; answered=true;
+        var ok=(i===Q.correct);
+        opts.querySelectorAll('.tl-qopt').forEach(function(x,j){x.disabled=true;
+          if(j===Q.correct)x.classList.add('ok'); else if(j===i)x.classList.add('bad');});
+        var why=document.createElement('div'); why.className='tl-qwhy';
+        why.innerHTML="<b>"+(ok?'✓ Right.':'✗ Not quite.')+"</b> "+esc(Q.why);
+        box.appendChild(why);
+        if(ok){var m=mem(); m.mastered=m.mastered||{}; m.mastered[decId]={ts:new Date().toISOString(),principle:Q.principle}; setMem(m);
+          var mk=head.querySelector('.tl-qmark'); mk.textContent='✓ MASTERED'; mk.classList.add('done');}
+        var rt=document.createElement('button'); rt.className='tl-qretry'; rt.type='button'; rt.textContent='try again';
+        rt.addEventListener('click',function(){init(node);}); box.appendChild(rt);
+      });
+      opts.appendChild(b);
+    });
+    box.appendChild(opts); node.appendChild(box);
+  }
+  document.querySelectorAll('.tl-quiz').forEach(init);
 })();
 """
 
@@ -682,6 +750,82 @@ def planning_story_html(motivation, goal, bar, pl):
     return _render_beats(planning_story_beats(motivation, goal, bar, pl))
 
 
+def _quiz_lead(s, cap=180):
+    """The sharp lead of a quiz answer — strip a leading 'Principle:' label and keep the first
+    sentence, so the correct OPTION is one crisp line, not the full teaching paragraph."""
+    s = re.sub(r"^\s*Principle:\s*", "", (s or "").strip(), flags=re.I)
+    m = re.search(r"[.;](\s|$)", s)
+    if m:
+        s = s[: m.start() + 1]
+    return _trunc(s, cap)
+
+
+def _quiz_rows():
+    """The teaching quiz bank (quiz.jsonl, repo root — sibling of research/). Each row is
+    {principle, q, naive, a, why, ...}; we map it to per-decision multiple-choice by principle."""
+    for p in (ROOT.parent / "quiz.jsonl", ROOT / "quiz.jsonl"):
+        if p.exists():
+            return tree._load_jsonl(p)
+    return []
+
+
+def _decision_quiz(pl, qrows=None, name=None):
+    """ONE offline multiple-choice question per decision, built from the quiz row whose
+    `principle` matches the decision's principle: correct = that row's answer (sharp lead),
+    trap = its `naive`, + up to two distractor `naive`s from OTHER principles. Graded entirely
+    in the browser (no API key), so the report stays self-contained. Option order is shuffled
+    deterministically (hashed by decision id) for reproducible builds. Decisions whose principle
+    has no quiz row are omitted — their widget simply renders nothing.
+
+    The decision's principle is resolved through the per-project adapter FIRST
+    (plan.canonical_principle), so a project's local id (proposals' `proposal-addressing`, kimi's
+    `tool-name-mapping`) lands on the single canonical rule (keys-must-be-canonical-...) and shares
+    its ONE quiz row — rules stay a single copy, the project only carries an adapter.
+    Returns {decId: {q, options:[...], correct: idx, why, principle}}."""
+    qrows = _quiz_rows() if qrows is None else qrows
+    by_pr = {}
+    for r in qrows:
+        pr = r.get("principle")
+        if pr:
+            by_pr.setdefault(pr, []).append(r)
+    # Distractor pool, SAME-DOMAIN first: naives from the OTHER (canonical) principles this very
+    # plan uses, then any naive in the bank as fallback. Keeps a proposals question's wrong answers
+    # about proposals — not the ML scars that happen to sit at the top of quiz.jsonl.
+    plan_prs = [p for p in (plan.canonical_principle(n.get("principle"), name) for n in pl)
+                if p in by_pr]
+    same_naive = [by_pr[p][0].get("naive", "").strip() for p in plan_prs
+                  if by_pr[p][0].get("naive", "").strip()]
+    all_naive = [r.get("naive", "").strip() for r in qrows if r.get("naive", "").strip()]
+    out = {}
+    for n in pl:
+        did = n.get("id")
+        pr = plan.canonical_principle(n.get("principle"), name)
+        if not did or pr not in by_pr:
+            continue
+        row = by_pr[pr][0]
+        correct = _quiz_lead(row.get("a", ""))
+        if not correct:
+            continue
+        opts, seen = [correct], {correct.lower()}
+        trap = (row.get("naive", "") or "").strip()
+        if trap and trap.lower() not in seen:
+            opts.append(trap)
+            seen.add(trap.lower())
+        for nv in same_naive + all_naive:  # same-domain distractors first, bank as fallback
+            if len(opts) >= 4:
+                break
+            if nv.lower() not in seen:
+                opts.append(nv)
+                seen.add(nv.lower())
+        order = sorted(range(len(opts)),
+                       key=lambda i: hashlib.md5((did + opts[i]).encode("utf-8")).hexdigest())
+        shuffled = [opts[i] for i in order]
+        out[did] = {"q": row.get("q", ""), "options": shuffled,
+                    "correct": shuffled.index(correct), "why": row.get("why", ""),
+                    "principle": pr}
+    return out
+
+
 def _chat_blob(name, goal, pl, glossary, clarify):
     """The grounding the in-browser chatbot reads: project goal, the full glossary (for the
     system prompt), and per-decision context + already-absorbed FAQ/terms. Pure render of the
@@ -694,6 +838,7 @@ def _chat_blob(name, goal, pl, glossary, clarify):
         if g.get("dec"):
             gloss_by.setdefault(g["dec"], []).append(
                 {"term": g.get("term", ""), "plain": g.get("plain", ""), "why": g.get("why", "")})
+    quizmap = _decision_quiz(pl, name=name)
     decmap = {}
     for n in pl:
         did = n.get("id")
@@ -701,7 +846,8 @@ def _chat_blob(name, goal, pl, glossary, clarify):
             continue
         decmap[did] = {"decision": n.get("decision", ""), "choice": n.get("choice", ""),
                        "principle": n.get("principle", ""), "why": n.get("why", ""),
-                       "faq": clar_by.get(did, []), "terms": gloss_by.get(did, [])}
+                       "faq": clar_by.get(did, []), "terms": gloss_by.get(did, []),
+                       "quiz": quizmap.get(did)}
     data = {"project": name, "goal": goal, "model": "claude-opus-4-8",
             "glossary": [{"term": g.get("term", ""), "plain": g.get("plain", ""),
                           "why": g.get("why", "")} for g in glossary],
@@ -783,7 +929,7 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
 
     H = ['<!doctype html><html lang="en"><head><meta charset="utf-8">',
          '<meta name="viewport" content="width=device-width,initial-scale=1">',
-         f"<title>{_e(name)} — research tree</title><style>{CSS}{CHAT_CSS}</style></head><body><div class='wrap'>"]
+         f"<title>{_e(name)} — research tree</title><style>{CSS}{CHAT_CSS}{QUIZ_CSS}</style></head><body><div class='wrap'>"]
 
     # ---- header / TLDR ----
     H.append("<div class='hdr'>")
@@ -870,6 +1016,7 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
                          f"<br><span class='dch'>→ {_gloss(_e(n.get('choice','')), gmap)}</span></span></summary>"
                          f"<div class='dwhy'><span class='pr'>{_e(n.get('principle',''))}</span> "
                          f"{_e(n.get('why',''))}</div>"
+                         f"<div class='tl-quiz' data-dec=\"{_e(n.get('id',''))}\"></div>"
                          f"<div class='tl-chat' data-dec=\"{_e(n.get('id',''))}\"></div></details>")
     spine.append("</div></div>")
     if planning:
@@ -893,11 +1040,157 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
     H.append('<script id="tl-data" type="application/json">'
              + _chat_blob(name, goal, pl, glossary, clarify) + "</script>")
     H.append("<script>" + CHAT_JS + "</script>")
+    H.append("<script>" + QUIZ_JS + "</script>")
     H.append("</body></html>")
     return "\n".join(H)
 
 
 # --- ascii summary (stdout / hook) ----------------------------------------------------
+
+# A self-contained slide layer — no reveal.js, no CDN, fully offline. Each .slide fills the
+# viewport; only .active shows; ~30 lines of inline JS (DECK_JS) handle arrow-key paging. The
+# .beat / .dec / .chip / .card / .phase styles all come from the report CSS above — reused
+# verbatim so a slide looks identical to the same block in the HTML report. @media print stacks
+# every slide one-per-page so the browser's Print → Save-as-PDF gives a real PDF deck.
+SLIDES_CSS = """
+html,body{margin:0;height:100%;background:#0b1220;color:#cbd5e1;overflow:hidden}
+.deck{height:100vh;width:100vw;position:relative}
+.slide{position:absolute;inset:0;display:none;flex-direction:column;
+  padding:34px 48px;box-sizing:border-box;overflow-y:auto;font-size:18px}
+.slide.active{display:flex}
+.slide.cover{justify-content:center;align-items:center;text-align:center}
+.slide h1{font-size:42px;color:#e2e8f0;margin:0 0 6px}
+.slide h2.sec{font-size:24px;color:#e2e8f0;margin:0 0 16px}
+.cover-goal{font-size:27px;color:#e2e8f0;margin:18px 0;max-width:84%;line-height:1.45}
+.cover-done{color:#fbbf24;margin:6px 0 14px}
+.cover .score{justify-content:center}
+.slide .story{margin:0}
+.slide .beat .bt{font-size:25px;line-height:1.45}.slide .beat .bl{font-size:15px}
+.slide .beat .blist li{font-size:18px}.slide .beat .tail{font-size:18px}
+.dec-flat{padding:11px 0;border-bottom:1px solid #1e293b;display:flex;gap:9px}
+.dec-flat:last-child{border-bottom:none}
+.deck-nav{position:fixed;bottom:13px;right:18px;font-size:12px;color:#64748b;z-index:20;
+  font-family:system-ui,sans-serif}
+@media print{html,body{overflow:visible;height:auto}.deck{height:auto}
+  .slide{display:flex!important;position:relative;inset:auto;height:100vh;
+    page-break-after:always}.deck-nav{display:none}}
+"""
+
+# Minimal offline slide navigator: ←/→ (or space / PgUp-PgDn) to page, Home/End to jump, click
+# anywhere to advance, deep-link via #N. No dependency — inlined into every deck.
+DECK_JS = """
+(function(){var s=[].slice.call(document.querySelectorAll('.slide')),i=0,
+c=document.getElementById('deck-cnt');
+function show(n){i=Math.max(0,Math.min(s.length-1,n));
+  s.forEach(function(el,k){el.classList.toggle('active',k===i);});
+  if(c)c.textContent=(i+1)+' / '+s.length;
+  if(('#'+(i+1))!==location.hash)history.replaceState(null,'','#'+(i+1));}
+function go(d){show(i+d);}
+document.addEventListener('keydown',function(e){
+  if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' ')go(1);
+  else if(e.key==='ArrowLeft'||e.key==='PageUp')go(-1);
+  else if(e.key==='Home')show(0);else if(e.key==='End')show(s.length-1);});
+document.addEventListener('click',function(e){if(!e.target.closest('a'))go(1);});
+var h=parseInt((location.hash||'').slice(1),10);show(isNaN(h)?0:h-1);})();
+"""
+
+
+def render_slides(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_order,
+                  glossary=None, clarify=None, motivation=""):
+    """A slide deck for the SAME project as render_html — one self-contained, OFFLINE
+    .slides.html (no CDN, no reveal.js; the paging engine is the inlined DECK_JS). Reuses every
+    data builder the HTML report uses (story_beats / spine_groups / timeline_rows / tree_svg /
+    glossary) so the deck never drifts from the report. Present in a browser (←/→ to page);
+    Print → Save-as-PDF gives a real PDF deck (one slide per page)."""
+    glossary = glossary or []
+    gmap = _gloss_map(glossary)
+    summ = plan.summary(pl)
+    counts = summ["counts"]
+    mt = plan.main_thread(pl)
+    pillars = plan.pillars(pl)
+    rows = timeline_rows(tree.load_events(name, tree.load_facts(name)), knowledge)
+    planning = bool(pl) and not rows and not nodes
+
+    def _sec(inner, extra=""):
+        return f"<section class='slide{(' ' + extra) if extra else ''}'>{inner}</section>"
+
+    secs = []
+    # 1 - cover: name - goal headline - done-bar - pillar chips - score
+    head, _bul, done = _want_parts(goal, bar, pl)
+    chips = "".join(f"<span class='chip pillar'>◆ {_e(p['id'])}</span>" for p in pillars)
+    cover = (f"<h1>{_e(name)}</h1><div class='cover-goal'>{_e(head)}</div>"
+             + (f"<div class='cover-done'><b>done</b> = {_e(done)}</div>" if done else "")
+             + (f"<div class='chips'>{chips}</div>" if chips else "")
+             + "<div class='score'><div class='dots'>" + _dots(counts) + "</div>"
+             f"<div class='lbl'>{counts.get('verified',0)} verified · {counts.get('decided',0)} "
+             f"decided · {counts.get('open',0)} open  ({summ['total']} decisions)</div></div>")
+    secs.append(_sec(cover, "cover"))
+
+    # 2 - story: one slide per beat (planning arc before any run, mature arc after)
+    beats = (planning_story_beats(motivation, goal, bar, pl) if planning
+             else story_beats(goal, bar, pl, nodes, rows))
+    for b in beats:
+        secs.append(_sec(_render_beats([b])))
+
+    # 3 - pipeline (only once phases form a real processing flow)
+    if not planning:
+        secs.append(_sec("<h2 class='sec'>The system, phase by phase</h2>" + pipeline_html(pl)))
+
+    # 4 - timeline
+    if not planning and rows:
+        tl = ["<h2 class='sec'>Timeline — how the search got here</h2><div class='card tl'>"]
+        for r in rows:
+            g, col, lbl = KIND.get(r["kind"], ("•", "#64748b", r["kind"]))
+            tl.append(f"<div class='row'><div class='date'>{_e(r['ts'])}</div>"
+                      f"<div class='mk' style='color:{col}'>{g}</div>"
+                      f"<div class='body'><span class='dir'>{_e(r['direction'])}</span> "
+                      f"<span class='knd'>{_e(lbl)}</span>"
+                      f"<div class='note'>{_e(r['note'])}</div></div></div>")
+        tl.append("</div>")
+        secs.append(_sec("".join(tl)))
+
+    # 5 - decision spine: one slide per phase, decisions rendered open (not collapsible)
+    for ph, decs in spine_groups(pl):
+        s = [f"<h2 class='sec'>Decisions — {_e(ph)}</h2><div class='card'>"]
+        for n in decs:
+            st = n.get("status", "open")
+            you = ("<span class='you'>← you are here</span>"
+                   if (mt and n.get("id") == mt.get("id")) else "")
+            pl_tag = "<span class='pill-tag'>◆ pillar</span>" if n.get("pillar") else ""
+            s.append("<div class='dec-flat'>"
+                     f"<span class='gl' style='color:{DEC_COLOR.get(st,'#64748b')}'>"
+                     f"{DEC_ICON.get(st,'?')}</span>"
+                     f"<span class='dsum'><span class='dq'>{_gloss(_e(n.get('decision','')), gmap)}"
+                     f"</span>{you}{pl_tag}"
+                     f"<br><span class='dch'>→ {_gloss(_e(n.get('choice','')), gmap)}</span>"
+                     f"<br><span class='dwhy'><span class='pr'>{_e(n.get('principle',''))}</span> "
+                     f"{_e(n.get('why',''))}</span></span></div>")
+        s.append("</div>")
+        secs.append(_sec("".join(s)))
+
+    # 6 - search tree: SVG inlined, renders natively in the deck (no rasterization)
+    if not planning and nodes:
+        secs.append(_sec("<h2 class='sec'>Search tree — the directions explored</h2>"
+                         "<div class='card' style='padding:12px 8px;overflow:auto'>"
+                         + tree_svg(nodes, knowledge, kinds, id2phase, phase_order)
+                         + "</div>", "tree-slide"))
+
+    # 7 - glossary appendix
+    if glossary:
+        secs.append(_sec("<h2 class='sec'>Glossary</h2>" + glossary_html(glossary)))
+
+    return "\n".join([
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width,initial-scale=1">',
+        f"<title>{_e(name)} — slides</title>",
+        f"<style>{CSS}{SLIDES_CSS}</style></head><body>",
+        "<div class='deck'>",
+        "\n".join(secs),
+        "</div>",
+        "<div class='deck-nav'><span id='deck-cnt'></span> · ←/→ page · Print→PDF</div>",
+        f"<script>{DECK_JS}</script>",
+        "</body></html>"])
+
 
 def stdout_summary(name, goal, bar, pl, nodes, knowledge, htmlpath):
     summ = plan.summary(pl)
@@ -957,7 +1250,10 @@ def _load_project(name):
 
 
 def generate(name):
-    """Write research/viz/<name>.html and return (path, project-dict)."""
+    """Write BOTH views of one project from a single load — the interactive report
+    research/viz/<name>.html and the offline slide deck <name>.slides.html — and return
+    (htmlpath, slidespath, project-dict). Two outputs, one _load_project() pass, so the deck
+    can never drift from the report."""
     d = _load_project(name)
     outdir = ROOT / "viz"
     outdir.mkdir(exist_ok=True)
@@ -967,7 +1263,13 @@ def generate(name):
                                     glossary=d["glossary"], clarify=d["clarify"],
                                     motivation=d["motivation"]),
                         encoding="utf-8")
-    return htmlpath, d
+    slidespath = outdir / f"{name}.slides.html"
+    slidespath.write_text(render_slides(d["name"], d["goal"], d["bar"], d["pl"], d["nodes"],
+                                        d["know"], d["kinds"], d["id2phase"], d["phase_order"],
+                                        glossary=d["glossary"], clarify=d["clarify"],
+                                        motivation=d["motivation"]),
+                          encoding="utf-8")
+    return htmlpath, slidespath, d
 
 
 def absorb(name, blob_path):
@@ -1006,9 +1308,24 @@ def absorb(name, blob_path):
                     seen.add((dec, q))
                     cadded += 1
 
-    htmlpath, _ = generate(name)
-    print(f"absorbed {added} glossary term(s) + {cadded} FAQ entr(y/ies) into "
-          f"{gpath.name} + {cpath.name}\nregenerated HTML: {htmlpath}")
+    # mastery the web quiz recorded -> the SAME store the terminal /trainlint:quiz writes, so a
+    # decision passed in the browser clears the understanding-gate too. Skipped silently if the
+    # progress module/decision isn't resolvable (fail-open, like the rest of absorb).
+    madded = 0
+    try:
+        import progress as _progress
+        pl = plan.load(name)
+        for did in (blob.get("mastered") or {}):
+            node = plan.by_id(pl, did)
+            if node:
+                _progress.mark(name, node, mastered=True)
+                madded += 1
+    except Exception:
+        pass
+
+    htmlpath, _slides, _ = generate(name)
+    print(f"absorbed {added} glossary term(s) + {cadded} FAQ entr(y/ies) + {madded} mastered "
+          f"decision(s) into {gpath.name} + {cpath.name} + plan-progress\nregenerated HTML: {htmlpath}")
 
 
 def main():
@@ -1029,8 +1346,9 @@ def main():
     if blob:
         absorb(name, blob)
         return
-    htmlpath, d = generate(name)
+    htmlpath, slidespath, d = generate(name)
     print(stdout_summary(name, d["goal"], d["bar"], d["pl"], d["nodes"], d["know"], htmlpath))
+    print(f"slides: {slidespath}  (open in a browser · ←/→ to page · Print → Save-as-PDF)")
 
 
 if __name__ == "__main__":

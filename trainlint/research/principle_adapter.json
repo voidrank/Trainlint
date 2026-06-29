@@ -1,0 +1,13 @@
+{
+  "_doc": "Project-local principle id -> canonical principle id (research/principles.jsonl). Rules live in ONE place; each project only writes this adapter to map its local vocabulary onto them. Lookups try the project scope then '*'. Absent => identity (the local id IS canonical).",
+  "proposals": {
+    "proposal-addressing": "keys-must-be-canonical-complete-and-unique",
+    "plan-run-is-a-proposal": "append-only-record"
+  },
+  "kimi": {
+    "tool-name-mapping": "keys-must-be-canonical-complete-and-unique",
+    "read-the-host-contract": "frozen-component-contract",
+    "anchor-to-work-not-session": "side-effect-hook-must-fire-on-every-branch",
+    "bake-paths-dont-trust-env": "config-from-many-sources-silently-overrides"
+  }
+}

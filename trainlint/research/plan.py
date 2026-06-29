@@ -64,6 +64,32 @@ def load(name=None):
     return rows
 
 
+_ADAPTER_CACHE = {}
+
+
+def canonical_principle(pid, name=None):
+    """Map a project-LOCAL principle id to its canonical id in the single rules bank
+    (principles.jsonl / quiz.jsonl) via the per-project adapter, research/principle_adapter.json.
+    Rules live in ONE place; each project only writes an adapter that translates its local
+    vocabulary onto them (the same shape as codex_compat / kimi_compat for hosts). Lookup tries the
+    project scope then '*'; absent => identity (the local id already IS canonical). Fail-open."""
+    if not pid:
+        return pid
+    name = _active(name)
+    if "map" not in _ADAPTER_CACHE:
+        try:
+            _ADAPTER_CACHE["map"] = json.loads(
+                (ROOT / "principle_adapter.json").read_text(encoding="utf-8"))
+        except Exception:
+            _ADAPTER_CACHE["map"] = {}
+    amap = _ADAPTER_CACHE["map"]
+    for scope in (name, "*"):
+        m = amap.get(scope)
+        if isinstance(m, dict) and pid in m:
+            return m[pid]
+    return pid
+
+
 def by_id(plan, pid):
     for n in plan:
         if n.get("id") == pid:
