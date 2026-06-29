@@ -36,6 +36,10 @@ try:
     import progress as progresslib  # noqa: E402  (plan-quiz mastery state)
 except Exception:  # pragma: no cover
     progresslib = None
+try:
+    import modeljudge  # opt-in Haiku FP-suppressor; on sys.path (hooks/) via the router
+except Exception:  # pragma: no cover
+    modeljudge = None
 
 
 def _haystack(data):
@@ -134,6 +138,11 @@ def assess(data):
             continue
         try:
             if re.search(nr, hay, re.IGNORECASE):
+                # opt-in Haiku precision: skip the drift nudge when the rejected words are only an
+                # incidental mention (comment / read-only / negative fixture), not a real drift.
+                if modeljudge is not None and modeljudge.is_false_positive(
+                        hay, "drifting toward a REJECTED approach: " + (d.get("not_this") or nr)):
+                    continue
                 items.append({"level": "coach", "plan_decision": d.get("id", "?"),
                               "message": (f"⛔ drift toward a REJECTED option — {d.get('not_this','')}. "
                                           f"Decision «{d.get('id','?')}» chose: {d.get('choice','')} over it"
@@ -166,7 +175,14 @@ def assess(data):
         # quizzed + mastered. Deliberately NOT deduped — it must fire on EVERY attempt, or the agent
         # could clear it just by retrying; only progress.mark (after a real quiz) clears it. This is the
         # ONE place plan-knowledge blocks: scoped to high-stakes phases + tool events, fail-open elsewhere.
-        if not mastered and d.get("phase", "") in HIGH_STAKES:
+        hard = (not mastered) and d.get("phase", "") in HIGH_STAKES
+        # opt-in Haiku precision: don't BLOCK when the action only mentions this high-stakes decision
+        # incidentally (the words sit in a comment, or it's a read-only probe / a labeled fixture) —
+        # fall through to the soft status reminders instead. Fail-open: unsure -> still blocks.
+        if hard and is_tool and modeljudge is not None and modeljudge.is_false_positive(
+                hay, f"{d.get('phase')}-stage work (editing model / loss / training code) on «{decision}»"):
+            hard = False
+        if hard:
             if is_tool:
                 items.append({"level": "reject", "sticky": True, "plan_decision": did,
                               "message": (

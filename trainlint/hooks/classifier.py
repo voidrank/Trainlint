@@ -23,6 +23,11 @@ from pathlib import Path
 
 import facts  # project-facts expansion of {{placeholders}}
 
+try:
+    import modeljudge  # opt-in Haiku FP-suppressor (on hooks/ sys.path via the router)
+except Exception:  # pragma: no cover
+    modeljudge = None
+
 ROOT = Path(__file__).resolve().parent.parent
 TRIGGERS = ROOT / "triggers.jsonl"
 CHECKS = ROOT / "hooks" / "checks.jsonl"
@@ -90,6 +95,10 @@ def _regex_rubric(data):
             continue
         inj = facts.expand((t.get("inject") or "").strip())
         if inj and inj not in seen:
+            # opt-in Haiku FP-suppression: drop an advisory nudge whose trigger words match only
+            # incidentally here (read-only command, mention-in-comment) — sticky ones are exempt.
+            if not t.get("sticky") and modeljudge is not None and modeljudge.is_false_positive(hay, inj[:240]):
+                continue
             seen.add(inj)
             # a trigger is a silent coach by default; one can opt up to "escalate"
             # (level field) to surface as a user-facing popup, not just an agent steer.

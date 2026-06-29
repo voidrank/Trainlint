@@ -21,6 +21,11 @@ from pathlib import Path
 
 import facts  # project-facts expansion of {{placeholders}}
 
+try:
+    import modeljudge  # opt-in Haiku FP-suppressor (on hooks/ sys.path via the router)
+except Exception:  # pragma: no cover
+    modeljudge = None
+
 CHECKS = Path(__file__).resolve().parent / "checks.jsonl"
 
 
@@ -104,6 +109,13 @@ def run(data, checks=None):
                     continue
             except (re.error, KeyError):
                 continue
+        # opt-in Haiku FP-suppression: ONLY for regex keyword checks — never a parsed verifier, a
+        # machine-certain catastrophic guard, or a sticky scar — kills the "keyword in a comment /
+        # read-only command / fixture" alarm. Fail-open: off / unsure -> the regex verdict stands.
+        if not c.get("verifier") and not c.get("machine_certain") and not c.get("sticky") \
+                and modeljudge is not None and modeljudge.is_false_positive(
+                    hay, (c.get("name", "") + ": " + facts.expand(c.get("message", "")))[:240]):
+            continue
         out.append({
             "name": c.get("name", ""),
             "level": c.get("level", "escalate"),
