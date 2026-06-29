@@ -10,9 +10,9 @@ rebuilt every run, never hand-maintained**. Read-only, fail-soft.
 
 | view | what it is | how to get it |
 |---|---|---|
-| **Plan** — the spine | the ordered DECISIONS that define the run, each tagged with a transferable principle + a status (open → decided → verified) | `python3 plan.py` · `/trainlint:plan` · `/trainlint:quiz` |
-| **Research tree** — the demo | ONE self-contained HTML: a 5-beat story (想做什么 · 遇到问题 · BOTTLENECK · 干了什么 · 要做什么) · dated timeline · decision spine beside the search tree · knowledge-readiness edges | `python3 viz.py [proj]` → `viz/<proj>.html` |
-| **Coaching hints** | the two read-only lints (below), one line, just-in-time | `python3 lint.py [proj]` (`--brief` = the SessionStart one-liner) |
+| **Plan** — the spine | the ordered DECISIONS that define the run, each tagged with a transferable principle + a status (open → decided → verified) | `python3 plan.py` · `/trainlint:plan` (decide + quiz) |
+| **Research tree** — the demo | ONE self-contained HTML: a 5-beat story (想做什么 · 遇到问题 · BOTTLENECK · 干了什么 · 要做什么) · dated timeline · decision spine beside the search tree · knowledge-readiness edges | `python3 viz.py [proj]` → `viz/<proj>.html` · `/trainlint:execute-and-report` |
+| **Coaching hints** | the two read-only lints (below), one line, just-in-time | `python3 lint.py [proj]` (`--brief` = the SessionStart one-liner) · `/trainlint:execute-and-report` |
 
 ## The two lints (pure hints — they never restrict exploration)
 
@@ -76,6 +76,6 @@ per-project facts (swap these to port — mechanism untouched)
 
 ## Port to another project
 
-`/trainlint:init <name>` (thin registrar) then `/trainlint:plan` — or hand-write
+`/trainlint:plan <name>` (it registers the project, then plans it) — or hand-write
 `facts/knowledge/log/plan/goal.<name>.*`. The mechanism and `principles.jsonl` are unchanged.
 Active project = `HARNESS_PROJECT` env / `.active-project` file / default `example`.

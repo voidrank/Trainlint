@@ -84,12 +84,12 @@ def context_briefing(name, nodes):
     b = lint.brief(name)
     parts.append(f"search tree: {len(nodes)} directions"
                  + (f"; {b}" if b else "; no stalled branches / ready papers right now"))
-    parts.append("full picture any time: `/trainlint:viz` (or python3 research/viz.py)")
+    parts.append("full picture any time: `/trainlint:execute-and-report` (or python3 research/viz.py)")
     return "  ·  ".join(parts)
 
 
 def _viz_directive():
-    return ("[trainlint:viz] the search tree changed since you last saw it — render it and send "
+    return ("[trainlint:execute-and-report] the search tree changed since you last saw it — render it and send "
             f"me the picture: run `python3 {HERE / 'viz.py'}` and SendUserFile the PNG it prints "
             "(on mobile it lands as a zoomable image).")
 

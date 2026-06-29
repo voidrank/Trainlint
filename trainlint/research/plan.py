@@ -189,4 +189,4 @@ if __name__ == "__main__":
             tags = ("★" if n.get("load_bearing") else " ") + ("◆" if n.get("pillar") else "")
             print(f"    {mark} {n.get('id',''):<{width}}  {tags}")
     print("\n  ●=decided ○=open ✓=verified · ★=main thread ◆=pillar"
-          "  ·  detail: read research/plan.<name>.jsonl or /trainlint:quiz")
+          "  ·  detail: read research/plan.<name>.jsonl or /trainlint:plan")

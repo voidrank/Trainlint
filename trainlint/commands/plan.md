@@ -6,6 +6,17 @@ The PLAN is the project's floor plan: an ordered list of DECISIONS (one JSONL li
 `${CLAUDE_PLUGIN_ROOT}/research/plan.<active-project>.jsonl`), every one tagged with the
 transferable PRINCIPLE that governs it. Active project = `${CLAUDE_PLUGIN_ROOT}/.active-project`.
 
+## Scaffold first if the project isn't registered yet
+`/trainlint:plan` is the single entry point — it registers a new project AND plans it. Before
+anything else, check `${CLAUDE_PLUGIN_ROOT}/.active-project` and whether
+`project.<name>.json` / `research/facts.<name>.json` exist for it. If the project the operator
+named isn't registered yet (or `$ARGUMENTS` is a fresh project name with no substrate), run the
+thin registrar first — `python3 "${CLAUDE_PLUGIN_ROOT}/research/new_project.py" <name>` — which
+creates the empty per-project files and sets it active, then continue straight into the planning
+flow below. It deliberately does NOT make you fill a pile of TODO fields; the facts get filled here,
+while you read the actual code. (There is no separate `init` command — scaffolding is just plan's
+first step when needed.)
+
 ## `from-log` — reconstruct the plan from a past session transcript (recovery)
 
 The plan is **cheap and reconstructable** — a session that already worked it out contains every
@@ -95,12 +106,16 @@ Present this full picture to me FIRST and let me correct it.
    toward it>"`. Make `not_re` match the rejected *usage*, NOT the legitimate reference (so "borrow
    repo B's recipe/data" must NOT trip it). The doorman then catches that drift on every action and the
    compass keeps it in front of you every turn — so a strong prior can't quietly win back the decision.
-4. **While establishing context, also FILL the facts files** init left empty (you're the one reading
+4. **While establishing context, also FILL the facts files** the registrar left empty (you're the one reading
    the code): `project.<name>.json` (the doorman's danger patterns — bad_storage_re,
    locked_configs_re, preproc_trap_re/preproc_ok_re, frozen_component, the *_example fields; see
    `project.example.json`) and `research/facts.<name>.json` (runs_glob, direction_regex,
    candidate_moves, trunk_checks; see `research/facts.example.json`). Leave a key empty rather than fake it.
-5. **Quiz me** — once the decisions are written, walk them as `/trainlint:quiz` does. Pose **every**
+5. **Quiz me** — once the decisions are written, walk them right here (this is the quiz; there is no
+   separate `/trainlint:quiz` command). Use `research/progress.py` for the mastery bookkeeping:
+   `progress.targets(plan)` returns the decisions that are new, changed, or not-yet-mastered — drill
+   only those (never re-drill a mastered+unchanged one). If `$ARGUMENTS` is a decision id / topic /
+   concept, restrict the walk to that. Pose **every**
    question through the **`AskUserQuestion` tool** (NOT plain text + end-of-turn — that produces no
    pop-up and the operator misses it): one correct option paraphrasing the answer, the `naive` wrong
    answer plus 1-2 plausible distractors, "Other" left for a free-text explanation. The answer comes
@@ -141,10 +156,11 @@ Present this full picture to me FIRST and let me correct it.
      start). Don't stop to ask which decision I'd like to revisit — that hands priority back to me and
      kills momentum.
    - **Everything else** — one line: "<M> still open across <phase>→<phase> — ask about any, or
-     `/trainlint:quiz` to drill them." A pointer, not a dump.
+     re-run `/trainlint:plan <id>` to drill one." A pointer, not a dump.
 
-   **Don't push empty tools:** if no experiments have run yet, `viz`/`lint` are empty — skip them; the
-   main thread is the destination, not a tool.
+   **Don't push empty tools:** if no experiments have run yet, the search-tree is empty and the
+   `/trainlint:execute-and-report` HTML shows only the planning-stage plan story (no timeline/tree)
+   — fine to render once, but don't END on it; the main thread is the destination, not a tool.
 
    **This is enforced, not just asked.** A finished report is prose, not a tool action, so it used to
    reach no hook — the voice rules were persuasion the model drops at large context. The `Stop` hook

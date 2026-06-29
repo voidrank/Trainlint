@@ -64,7 +64,7 @@ BAD = (
     "vq_mask/cu_seqlens machinery via the offline packed builder in rows.py and collator.py. "
     "Everything else — the duplex stage config off stage3, the MoE batch/LR re-grounding — sits "
     "on top of that layout being right.\n\n"
-    "Want me to start there? You can also /trainlint:quiz to drill the re-grounded decisions."
+    "Want me to start there? You can also /trainlint:plan to drill the re-grounded decisions."
 )
 
 # A compliant report: plain language, the stance line, the phase-grouped map glyphs, ids as tags.

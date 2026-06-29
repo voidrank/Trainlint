@@ -81,7 +81,7 @@ def decide(data):
                 it["message"] = "(plan: this decision is settled) " + it.get("message", "")
 
     # NOTE: the old mid-action quiz-gate (hooks/quiz.py) was deleted. Quizzing now has two paths:
-    # the deliberate /trainlint:quiz command over the plan's decisions, and the `concept-gap-quiz`
+    # the deliberate quiz built into /trainlint:plan over the plan's decisions, and the `concept-gap-quiz`
     # trigger, which ESCALATES (a user-facing popup) the moment a concept gap shows in the prompt.
 
     # An unexpanded {{placeholder}} means a project fact this rule needs isn't filled yet

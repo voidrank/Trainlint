@@ -83,22 +83,23 @@ trainlint/
 │   ├── plan.example.jsonl  facts.example.json  goal.example.txt  knowledge.example.jsonl  log.example.jsonl
 │   ├── plan.workflow.js  internal engine for /trainlint:plan (big-codebase offload; not its own command)
 │   ├── tree.py  governor.py  surfacer.py  lint.py  harvest.py  new_project.py
-│   ├── viz.py               research-tree HTML + cross-project index + principles ledger
+│   ├── viz.py               research-tree HTML (5-beat story · timeline · spine+tree); planning-stage mode before any run
 │   ├── principles.jsonl     distilled project-AGNOSTIC laws (the refined layer)
-├── commands/{init,plan,quiz,viz,lint}.md
+├── commands/{plan,execute-and-report}.md
 ├── codex/hooks.json  install-codex.sh    Codex CLI port (apply_patch matcher, PreCompact harvest)
 └── tests/{run.py, cases.jsonl, test_planaware.py, test_codex_compat.py}   +  research/test_research.py
 ```
 
-## Commands (slash commands, when installed as a plugin)
+## Commands (two — decide, then do)
+
+The surface is deliberately **two slash commands**: one for the *thinking* half of the loop, one
+for the *doing* half. (Scaffolding, drilling, lint, and viz all fold into these — they were never
+separate stages of the work, just separate buttons.)
 
 | command | what it does |
 |---|---|
-| `/trainlint:init <name>` | register a NEW project — a THIN scaffolder (empty stubs + set active; no TODO ceremony) |
-| `/trainlint:plan` | establish the project's FULL context (plain language, file:line grounded), decompose into decisions (written as you go), fill the facts, then quiz — closing on the **compass** (goal · main thread · next action), never a menu |
-| `/trainlint:quiz [id\|topic\|concept]` | drill the plan's decisions and the sticky **concepts** you keep forgetting (mastery-tracked); miss it → drilled with fresh scars |
-| `/trainlint:viz [project]` | generate the research tree — a self-contained, demo-ready HTML report (top-down TLDR · dated timeline · phase-ordered decision spine beside the search tree · knowledge-readiness edges), plus a compact ASCII summary to stdout |
-| `/trainlint:lint [project]` | run the research-lint: reconstruct the tree, surface directionality + readiness hints (read-only) |
+| `/trainlint:plan [review\|status\|from-log\|<id\|topic\|free-text>]` | the **decide** half — registers the project if new (thin scaffold), establishes its FULL context (plain language, file:line grounded), decomposes into decisions (written as you go), fills the facts, then **quizzes you** on each (pass an id/topic/concept to drill just one) — closing on the **compass** (goal · main thread · next action), never a menu |
+| `/trainlint:execute-and-report [project\|decision-id]` | the **do** half — picks the one decision everything waits on (the `load_bearing` main thread), proposes & **drives** the cheapest move to settle it (doorman live the whole time), records the outcome back into the plan, then **reports**: the search-tree shape (the old `lint`) + the self-contained HTML report (the old `viz`) |
 
 `/trainlint:plan` runs in the **foreground** by default (the agent owns the journey — it stays engaged
 and you can interject); a background workflow is available only for a very large codebase.
@@ -113,10 +114,12 @@ to session boundaries (a session may never end):
 - **compass** — every `UserPromptSubmit` injects an always-on, agent-facing compass (🎯 goal · main
   thread) so the agent stays locked on the one thing that matters instead of drifting into busywork.
 - **hint** — the one-line research-lint hint, deduped (only when it changes).
-- **viz** — when the tree gains a *real* search (branching or a wall), nudge to render + send it.
+- **report** — when the tree gains a *real* search (branching or a wall), nudge to run
+  `/trainlint:execute-and-report` to render + send the picture.
 - harvest runs on `PreCompact`/`SessionEnd`.
 
-Quizzing has two paths: **deliberate** (`/trainlint:quiz` over the plan's decisions) and
+Quizzing has two paths: **deliberate** (the quiz built into `/trainlint:plan`, walking the plan's
+decisions) and
 **concept-gap** (the `concept-gap-quiz` trigger fires the moment you ask what a term means / say you
 don't follow one → it **escalates a popup**: quiz you first, then define it plainly and log it to
 `research/glossary.<name>.jsonl`). The popup is `sticky` — it survives even when the touched decision
@@ -132,9 +135,9 @@ and the opt-in mid-action quiz-gate were both removed.
 
 ## Onboard a new project
 
-`/trainlint:init <name>` (thin registrar) → `/trainlint:plan` (it reads the code, fills the facts,
-writes the decisions + goal + glossary, then quizzes you). See `project.example.json` /
-`research/*.example.*` as worked examples.
+`/trainlint:plan <name>` — it registers the project (thin scaffold), reads the code, fills the facts,
+writes the decisions + goal + glossary, then quizzes you, all in one flow. Then drive it with
+`/trainlint:execute-and-report`. See `project.example.json` / `research/*.example.*` as worked examples.
 
 ## Install
 
