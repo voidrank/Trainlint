@@ -9,6 +9,7 @@ import governor
 import surfacer
 import plan
 import progress
+import viz
 
 
 def main():
@@ -83,7 +84,32 @@ def main():
     check(any(n["id"] == d0["id"] for n in progress.targets([edited], prog1)),
           "editing a mastered decision (fingerprint change) re-opens it for quizzing")
 
-    total = 20
+    # --- viz: PLANNING STAGE vs MATURE rendering ---------------------------------------
+    # A project with a plan but no experiments (no log events, no search tree) must render
+    # the tight plan story (motivation -> goal -> main thread -> next + the decision spine),
+    # NOT the mature arc/timeline/tree/pipeline-band that would all be empty.
+    pln = viz.render_html("__planning_probe__", "Goal probe sentence", "the done bar",
+                          pl, {}, [], {}, {}, [], motivation="MOTIVATION_PROBE_TEXT")
+    check("a plan in progress" in pln, "planning report uses the plan-in-progress subtitle")
+    check("MOTIVATION" in pln and "MOTIVATION_PROBE_TEXT" in pln,
+          "planning report leads with the motivation beat (from motivation.<name>.txt)")
+    check("Decisions — the plan" in pln, "planning report renders the decision spine as the map")
+    check("Pipeline — the system" not in pln,
+          "planning report DROPS the pipeline band (phases are categories, not a flow)")
+    check("No dated events harvested" not in pln and "Timeline — how the search" not in pln,
+          "planning report suppresses the empty timeline instead of showing an empty box")
+    check("Search tree" not in pln,
+          "planning report suppresses the empty search tree")
+
+    # A mature project (real log + tree) keeps the full rich view, untouched.
+    mat = viz.render_html("example", "Goal", "bar", pl, nodes, know, {}, {}, [], motivation="ignored")
+    check("Pipeline — the system" in mat, "mature report keeps the pipeline band")
+    check("Timeline — how the search" in mat, "mature report keeps the timeline section")
+    check("Search tree" in mat, "mature report keeps the search tree")
+    check("a plan in progress" not in mat and "MOTIVATION_PROBE_TEXT" not in mat,
+          "mature report does NOT switch to planning mode (and ignores motivation)")
+
+    total = 30
     print(f"\n{total - fails}/{total} passed")
     sys.exit(1 if fails else 0)
 

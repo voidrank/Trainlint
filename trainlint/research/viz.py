@@ -16,6 +16,13 @@ The report weaves the layers the substrate already records, each on its natural 
                    a wall linking to the paper it unlocks.            (from the annotation log)
   3. SPINE+TREE  — the phase-ordered DECISION spine (what we know) beside the SEARCH tree
                    (the directions explored), with knowledge-readiness edges off the walls.
+
+PLANNING STAGE — a project with a plan but NO experiments yet (no log events, no search tree).
+The mature arc above leans on the log, so before any run it renders empty boxes and reads as
+broken. When `planning` is detected, the report instead tells a tight, all-English plan story —
+MOTIVATION (from motivation.<name>.txt) · GOAL (总分总) · MAIN THREAD · NEXT — over a full-width
+decision spine, and SUPPRESSES the timeline, search tree, and pipeline band (all empty/abstract
+at this stage). A project graduates to the mature view automatically once it logs its first event.
 """
 import html
 import json
@@ -618,11 +625,12 @@ def story_beats(goal, bar, pl, nodes, rows):
     return beats
 
 
-def story_html(goal, bar, pl, nodes, rows):
-    """Render the five-beat narrative arc as the lead of a project report. The WANT beat may
-    carry `bullets` (总分总: headline · bulleted core pillars · done-tail); others are head+sub."""
+def _render_beats(beats):
+    """Render a list of story beats to HTML. A beat is {cls,label,head} plus optional
+    sub / bullets (总分总 pillar list) / tail (pre-escaped HTML). Shared by the mature
+    five-beat arc and the planning-stage arc so they stay visually identical."""
     H = ["<div class='story'>"]
-    for b in story_beats(goal, bar, pl, nodes, rows):
+    for b in beats:
         body = [f"<div class='bt'>{_e(b['head'])}"]
         if b.get("sub"):
             body.append(f"<span class='sm'>{_e(b['sub'])}</span>")
@@ -638,6 +646,40 @@ def story_html(goal, bar, pl, nodes, rows):
                  f"{''.join(body)}</div>")
     H.append("</div>")
     return "\n".join(H)
+
+
+def story_html(goal, bar, pl, nodes, rows):
+    """Render the five-beat narrative arc as the lead of a project report. The WANT beat may
+    carry `bullets` (总分总: headline · bulleted core pillars · done-tail); others are head+sub."""
+    return _render_beats(story_beats(goal, bar, pl, nodes, rows))
+
+
+def planning_story_beats(motivation, goal, bar, pl):
+    """The PLANNING-STAGE arc — for a project that has NOT run experiments yet (no log, no
+    search tree). The mature five-beat arc leans on the log (timeline, walls hit, verdicts),
+    so before any run it renders three empty boxes and reads as broken. This arc is fed
+    ENTIRELY by the plan + goal, so every beat carries real content: why it matters · what
+    we're building (总分总 headline+pillars+done) · the one open decision everything waits on ·
+    the concrete next move. All-English (the mature arc keeps its bilingual labels untouched)."""
+    mt = plan.main_thread(pl)
+    n_open = plan.summary(pl)["counts"].get("open", 0)
+    beats = []
+    if motivation:
+        beats.append({"cls": "prob", "label": "💡 MOTIVATION", "head": motivation})
+    head, bullets, done = _want_parts(goal, bar, pl)
+    beats.append({"cls": "want", "label": "🎯 GOAL", "head": head, "bullets": bullets,
+                  "tail": (f"<b>done</b> = {_e(done)}" if done else "")})
+    if mt:
+        beats.append({"cls": "neck", "label": "🔻 MAIN THREAD", "head": mt.get("decision", ""),
+                      "sub": f"the one open decision everything waits on · {mt.get('id','')}"})
+        beats.append({"cls": "next", "label": "➡️ NEXT",
+                      "head": mt.get("choice", "") or "settle this decision next",
+                      "sub": f"{n_open} decision(s) still open" if n_open else ""})
+    return beats
+
+
+def planning_story_html(motivation, goal, bar, pl):
+    return _render_beats(planning_story_beats(motivation, goal, bar, pl))
 
 
 def _chat_blob(name, goal, pl, glossary, clarify):
@@ -726,7 +768,7 @@ def glossary_html(glossary):
 
 
 def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_order,
-                glossary=None, clarify=None):
+                glossary=None, clarify=None, motivation=""):
     glossary, clarify = glossary or [], clarify or []
     gmap = _gloss_map(glossary)
     summ = plan.summary(pl)
@@ -735,6 +777,9 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
     pillars = plan.pillars(pl)
     avoided = plan.avoided(pl)
     rows = timeline_rows(tree.load_events(name, tree.load_facts(name)), knowledge)
+    # PLANNING STAGE: a plan exists but no experiments have run (no dated log events, no search
+    # tree). The mature arc/timeline/tree would render empty; instead tell a tight plan story.
+    planning = bool(pl) and not rows and not nodes
 
     H = ['<!doctype html><html lang="en"><head><meta charset="utf-8">',
          '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -742,9 +787,14 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
 
     # ---- header / TLDR ----
     H.append("<div class='hdr'>")
-    H.append(f"<h1>{_e(name)}</h1><div class='sub'>research tree · a Trainlint derived view — "
-             "the project as one story: want · problem · bottleneck · did · next</div>")
-    H.append(story_html(goal, bar, pl, nodes, rows))
+    if planning:
+        H.append(f"<h1>{_e(name)}</h1><div class='sub'>Trainlint plan · a plan in progress — "
+                 "motivation · goal · decisions · next (no experiments run yet)</div>")
+        H.append(planning_story_html(motivation, goal, bar, pl))
+    else:
+        H.append(f"<h1>{_e(name)}</h1><div class='sub'>research tree · a Trainlint derived view — "
+                 "the project as one story: want · problem · bottleneck · did · next</div>")
+        H.append(story_html(goal, bar, pl, nodes, rows))
     H.append("<div class='score'><div class='dots'>" + _dots(counts) + "</div>"
              f"<div class='lbl'>{counts.get('verified',0)} verified · {counts.get('decided',0)} decided · "
              f"{counts.get('open',0)} open  ({summ['total']} decisions)</div></div>")
@@ -757,64 +807,81 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
     H.append("</div>")  # hdr
 
     # ---- pipeline (the system, phase by phase) ----
-    H.append(pipeline_html(pl))
+    # Only meaningful when phases form an actual processing flow (data→preproc→model→train→eval).
+    # At planning stage the phases are decision CATEGORIES, not a pipeline, and the abstract
+    # "N/M settled" score just duplicates the spine below — so skip it.
+    if not planning:
+        H.append(pipeline_html(pl))
 
     # ---- legend ----
-    H.append("<div class='legend'>"
-             "<span><b>spine</b> ✓ verified ◐ decided ○ open</span>"
-             "<span><b>tree</b> ⚠ open problem · ✓ wall closed · ◆ tested · ↩ backtracked · ● decided · ○ idea</span>"
-             "<span><b>edges</b> ⚠ wall → 📖 paper it unlocks</span>"
-             "<span>click a decision to see its principle</span></div>")
-
-    # ---- timeline ----
-    H.append("<h2 class='sec'>Timeline — how the search got here</h2>")
-    if rows:
-        H.append("<div class='card tl'>")
-        for r in rows:
-            g, col, lbl = KIND.get(r["kind"], ("•", "#64748b", r["kind"]))
-            d = r["delta"]
-            dhtml = ""
-            if d is not None:
-                cls = "up" if d > 0 else "flat"
-                dhtml = f"<span class='delta {cls}'>{('+' if d>0 else '')}{d}</span>"
-            read = ""
-            if r["paper"]:
-                read = (f"<br><a class='read' href='#kn-{_e(r['paper']['id'])}'>"
-                        f"📖 now readable: {_e(_trunc(r['paper']['title'],46))}</a>")
-            H.append(f"<div class='row'><div class='date'>{_e(r['ts'])}</div>"
-                     f"<div class='mk' style='color:{col}'>{g}</div>"
-                     f"<div class='body'><span class='dir'>{_e(r['direction'])}</span>"
-                     f"<span class='knd'>{_e(lbl)}</span>{dhtml}"
-                     f"<div class='note'>{_e(r['note'])}{read}</div></div></div>")
-        H.append("</div>")
+    if planning:
+        H.append("<div class='legend'>"
+                 "<span><b>decisions</b> ✓ verified ◐ decided ○ open</span>"
+                 "<span>◆ pillar — a core dimension the project always rests on</span>"
+                 "<span>★ main thread — the one decision to settle next</span>"
+                 "<span>click a decision to see its principle (or ask its chatbot)</span></div>")
     else:
-        H.append("<div class='card'><div class='empty'>No dated events harvested yet — the "
-                 "timeline fills in from the session log (walls, verdicts, backtracks).</div></div>")
+        H.append("<div class='legend'>"
+                 "<span><b>spine</b> ✓ verified ◐ decided ○ open</span>"
+                 "<span><b>tree</b> ⚠ open problem · ✓ wall closed · ◆ tested · ↩ backtracked · ● decided · ○ idea</span>"
+                 "<span><b>edges</b> ⚠ wall → 📖 paper it unlocks</span>"
+                 "<span>click a decision to see its principle</span></div>")
 
-    # ---- spine + tree ----
-    H.append("<div class='cols'>")
-    # left: decision spine
-    H.append("<div><h2 class='sec'>Decision spine — what we know</h2><div class='card'>")
+    # ---- timeline (suppressed at planning stage — nothing has happened yet) ----
+    if not planning:
+        H.append("<h2 class='sec'>Timeline — how the search got here</h2>")
+    if not planning:
+        if rows:
+            H.append("<div class='card tl'>")
+            for r in rows:
+                g, col, lbl = KIND.get(r["kind"], ("•", "#64748b", r["kind"]))
+                d = r["delta"]
+                dhtml = ""
+                if d is not None:
+                    cls = "up" if d > 0 else "flat"
+                    dhtml = f"<span class='delta {cls}'>{('+' if d>0 else '')}{d}</span>"
+                read = ""
+                if r["paper"]:
+                    read = (f"<br><a class='read' href='#kn-{_e(r['paper']['id'])}'>"
+                            f"📖 now readable: {_e(_trunc(r['paper']['title'],46))}</a>")
+                H.append(f"<div class='row'><div class='date'>{_e(r['ts'])}</div>"
+                         f"<div class='mk' style='color:{col}'>{g}</div>"
+                         f"<div class='body'><span class='dir'>{_e(r['direction'])}</span>"
+                         f"<span class='knd'>{_e(lbl)}</span>{dhtml}"
+                         f"<div class='note'>{_e(r['note'])}{read}</div></div></div>")
+            H.append("</div>")
+        else:
+            H.append("<div class='card'><div class='empty'>No dated events harvested yet — the "
+                     "timeline fills in from the session log (walls, verdicts, backtracks).</div></div>")
+
+    # ---- decision spine (full-width at planning stage; beside the search tree once it exists) ----
+    spine = ["<div><h2 class='sec'>"
+             + ("Decisions — the plan, phase by phase" if planning else "Decision spine — what we know")
+             + "</h2><div class='card'>"]
     for ph, decs in spine_groups(pl):
-        H.append(f"<div class='phase'>{_e(ph)}</div>")
+        spine.append(f"<div class='phase'>{_e(ph)}</div>")
         for n in decs:
             st = n.get("status", "open")
             you = "<span class='you'>← you are here</span>" if (mt and n.get("id") == mt.get("id")) else ""
             pl_tag = "<span class='pill-tag'>◆ pillar</span>" if n.get("pillar") else ""
-            H.append("<details class='dec'><summary>"
-                     f"<span class='gl' style='color:{DEC_COLOR.get(st,'#64748b')}'>{DEC_ICON.get(st,'?')}</span>"
-                     f"<span class='dsum'><span class='dq'>{_gloss(_e(n.get('decision','')), gmap)}</span>{you}{pl_tag}"
-                     f"<br><span class='dch'>→ {_gloss(_e(n.get('choice','')), gmap)}</span></span></summary>"
-                     f"<div class='dwhy'><span class='pr'>{_e(n.get('principle',''))}</span> "
-                     f"{_e(n.get('why',''))}</div>"
-                     f"<div class='tl-chat' data-dec=\"{_e(n.get('id',''))}\"></div></details>")
-    H.append("</div></div>")
-    # right: search tree
-    H.append("<div><h2 class='sec'>Search tree — the directions explored</h2>"
-             "<div class='card' style='padding:12px 8px;overflow-x:auto'>")
-    H.append(tree_svg(nodes, knowledge, kinds, id2phase, phase_order))
-    H.append("</div></div>")
-    H.append("</div>")  # cols
+            spine.append("<details class='dec'><summary>"
+                         f"<span class='gl' style='color:{DEC_COLOR.get(st,'#64748b')}'>{DEC_ICON.get(st,'?')}</span>"
+                         f"<span class='dsum'><span class='dq'>{_gloss(_e(n.get('decision','')), gmap)}</span>{you}{pl_tag}"
+                         f"<br><span class='dch'>→ {_gloss(_e(n.get('choice','')), gmap)}</span></span></summary>"
+                         f"<div class='dwhy'><span class='pr'>{_e(n.get('principle',''))}</span> "
+                         f"{_e(n.get('why',''))}</div>"
+                         f"<div class='tl-chat' data-dec=\"{_e(n.get('id',''))}\"></div></details>")
+    spine.append("</div></div>")
+    if planning:
+        H.append("".join(spine))
+    else:
+        H.append("<div class='cols'>")
+        H.append("".join(spine))
+        H.append("<div><h2 class='sec'>Search tree — the directions explored</h2>"
+                 "<div class='card' style='padding:12px 8px;overflow-x:auto'>")
+        H.append(tree_svg(nodes, knowledge, kinds, id2phase, phase_order))
+        H.append("</div></div>")
+        H.append("</div>")  # cols
 
     H.append(glossary_html(glossary))
 
@@ -871,6 +938,8 @@ def _load_project(name):
     clarify = tree._load_jsonl(ROOT / f"clarify.{name}.jsonl")
     gp = ROOT / f"goal.{name}.txt"
     goal, bar = split_goal(gp.read_text(encoding="utf-8") if gp.exists() else "")
+    mp = ROOT / f"motivation.{name}.txt"
+    motivation = " ".join(mp.read_text(encoding="utf-8").split()) if mp.exists() else ""
     kinds = {}
     for e in tree.load_events(name, facts):
         d = e.get("direction")
@@ -883,7 +952,8 @@ def _load_project(name):
             phase_order.append(n.get("phase", ""))
     return {"name": name, "facts": facts, "nodes": nodes, "pl": pl, "know": know,
             "goal": goal, "bar": bar, "kinds": kinds, "id2phase": id2phase,
-            "phase_order": phase_order, "glossary": glossary, "clarify": clarify}
+            "phase_order": phase_order, "glossary": glossary, "clarify": clarify,
+            "motivation": motivation}
 
 
 def generate(name):
@@ -894,7 +964,8 @@ def generate(name):
     htmlpath = outdir / f"{name}.html"
     htmlpath.write_text(render_html(d["name"], d["goal"], d["bar"], d["pl"], d["nodes"],
                                     d["know"], d["kinds"], d["id2phase"], d["phase_order"],
-                                    glossary=d["glossary"], clarify=d["clarify"]),
+                                    glossary=d["glossary"], clarify=d["clarify"],
+                                    motivation=d["motivation"]),
                         encoding="utf-8")
     return htmlpath, d
 
@@ -902,7 +973,7 @@ def generate(name):
 def absorb(name, blob_path):
     """Fold an exported `viz-memory.<name>.json` (what the in-browser chatbots captured) back
     into the substrate, then regenerate. Glossary terms append to glossary.<name>.jsonl — the
-    SAME file /trainlint:quiz drills — so a concept the operator kept asking about becomes
+    SAME file /trainlint:plan drills — so a concept the operator kept asking about becomes
     drillable; the raw Q&A appends to clarify.<name>.jsonl, which viz renders as an FAQ under
     each decision. Dedupe so re-absorbing the same export is a no-op."""
     import json as _json

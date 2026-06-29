@@ -258,7 +258,7 @@ principle (e.g. `np.zeros`→OOD and `power=2.0`→OOD are both `frozen-componen
 **share the same `principle`**—this is exactly the expression of "principles are transferable, instances are not."
 
 Quizzing has two paths (the old opt-in mid-action quiz-gate was removed — it was dead, gated behind a
-flag and unwired from the router): the deliberate `/trainlint:quiz` command over the plan's decisions,
+flag and unwired from the router): the deliberate quiz built into `/trainlint:plan`, walking the plan's decisions,
 and the `concept-gap-quiz` trigger. The trigger fires the moment a concept gap shows in the prompt
 ("what is X" / "I don't follow X") and **escalates a user-facing popup** (level `escalate`) rather than
 a silent coach steer. It carries `sticky: true`, which exempts it from the plan-aware "settled

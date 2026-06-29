@@ -183,13 +183,13 @@ def assess(data):
                 items.append({"level": "escalate", "sticky": True, "plan_decision": did,
                               "message": (f"🚦 GATE — you're about to do {d.get('phase')}-stage work on "
                                           f"«{decision}» but haven't DRILLED it in quiz (principle: {princ}).{why} "
-                                          f"Quiz it first: `/trainlint:quiz {did}`.")})
+                                          f"Quiz it first: `/trainlint:plan {did}`.")})
             continue
         # soft status reminders — deduped once per (session, decision)
         if _seen_then_mark(session, did):
             continue
         gate = ("" if mastered
-                else f" (you haven't walked this decision in quiz yet — `/trainlint:quiz {did}`)")
+                else f" (you haven't walked this decision in quiz yet — `/trainlint:plan {did}`)")
         if status == "open":
             items.append({"level": "escalate", "plan_decision": did,
                           "message": (f"⟦plan:{did}⟧ this acts on an UNDECIDED decision — "
