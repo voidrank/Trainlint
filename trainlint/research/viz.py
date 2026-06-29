@@ -18,6 +18,7 @@ The report weaves the layers the substrate already records, each on its natural 
                    (the directions explored), with knowledge-readiness edges off the walls.
 """
 import html
+import json
 import re
 import sys
 from pathlib import Path
@@ -354,6 +355,151 @@ details.dec>summary::-webkit-details-marker{display:none}
 .treecap b{color:#334155}
 .empty{color:var(--mut);font-size:13px;padding:22px 16px;text-align:center}
 .foot{color:#94a3b8;font-size:11.5px;text-align:center;margin:22px 0 6px}
+.pp{display:flex;flex-wrap:wrap;align-items:stretch;gap:6px;margin:4px 0 6px}
+.pp-stage{flex:1 1 112px;min-width:112px;background:#fff;border:1px solid var(--line,#e2e8f0);border-top:3px solid;border-radius:9px;padding:8px 10px}
+.pp-t{font-weight:700;font-size:12.5px}
+.pp-now{color:#2563eb;font-size:10px;font-weight:700;margin-left:5px}
+.pp-s{color:var(--mut,#64748b);font-size:11px;margin-top:2px}
+.pp-arr{align-self:center;color:#cbd5e1;font-size:12px}
+@media(max-width:560px){.pp-arr{display:none}.pp-stage{flex-basis:100%}}
+abbr.gl-term{text-decoration:underline dotted #94a3b8;text-underline-offset:2px;cursor:help}
+.gl-box{margin:14px 0 4px;background:#fff;border:1px solid var(--line,#e2e8f0);border-radius:10px;padding:2px 14px}
+.gl-box summary{cursor:pointer;font-weight:700;font-size:12.5px;padding:9px 0}
+.gl-row{font-size:12px;color:#334155;padding:4px 0;border-top:1px solid var(--line,#eef2f7)}
+"""
+
+
+# --- per-action-item chatbot: CSS + JS (the only client-side, JS-bearing parts) ----
+# A self-contained widget under every decision. It calls the Anthropic API straight from
+# the browser (key in localStorage, never baked into the file), grounds each answer in that
+# decision + the project glossary, and captures what the user didn't grok into localStorage
+# — which `viz --absorb <blob.json>` later folds back into glossary.* + clarify.* on disk.
+CHAT_CSS = """
+.tl-chat{margin:6px 0 10px 24px;font-size:13px}
+.tl-ask{cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:8px;padding:3px 10px;font-size:12px;font-weight:600}
+.tl-ask:hover{background:#e0e7ff}
+.tl-panel{display:none;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:#fafbff;overflow:hidden}
+.tl-panel.open{display:block}
+.tl-saved{padding:8px 10px;border-bottom:1px solid #eef2f7}
+.tl-saved h5{margin:0 0 4px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#94a3b8}
+.tl-term{font-size:12.5px;margin:3px 0}.tl-term b{color:#3730a3}
+.tl-unsv{font-size:9.5px;color:#b45309;background:#fef3c7;border-radius:5px;padding:0 5px;margin-left:5px}
+.tl-faq{font-size:12.5px;margin:5px 0;color:#334155}
+.tl-faq .q{font-weight:700;color:#0f172a}
+.tl-log{padding:8px 10px;min-height:54px;max-height:340px;overflow-y:auto;resize:vertical}
+.tl-msg{margin:6px 0;font-size:13px;line-height:1.45;white-space:pre-wrap}
+.tl-msg.u b{color:#3730a3}.tl-msg.a b{color:#16a34a}.tl-msg.err{color:#b91c1c}
+.tl-in{display:flex;gap:6px;padding:8px 10px;border-top:1px solid #eef2f7}
+.tl-in textarea{flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px;font:inherit;font-size:13px;resize:vertical;min-height:36px}
+.tl-in button{border:0;background:#4f46e5;color:#fff;border-radius:8px;padding:0 14px;font-weight:600;cursor:pointer}
+.tl-in button:disabled{background:#a5b4fc}
+.tl-bar{position:fixed;right:14px;bottom:14px;display:flex;gap:8px;z-index:50}
+.tl-bar button{border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.tl-bar button:hover{background:#f8fafc}
+"""
+
+# Plain string (NOT an f-string) — the JS keeps its own braces/backticks. It reads the
+# embedded <script id="tl-data"> blob for grounding; nothing about the project is hard-coded.
+CHAT_JS = r"""
+(function(){
+  var el=document.getElementById('tl-data'); if(!el) return;
+  var DATA=JSON.parse(el.textContent);
+  var LS='trainlint_mem_'+DATA.project, KK='trainlint_anthropic_key', MK='trainlint_model';
+  function mem(){try{return JSON.parse(localStorage.getItem(LS))||{faq:{},glossary:[]}}catch(e){return{faq:{},glossary:[]}}}
+  function setMem(m){localStorage.setItem(LS,JSON.stringify(m))}
+  function esc(s){return (s==null?'':String(s)).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+  function glossaryText(){return (DATA.glossary||[]).map(function(g){return '- '+g.term+': '+g.plain+(g.why?(' ('+g.why+')'):'')}).join('\n')}
+  function sysPrompt(dec){
+    return 'You are a tutor embedded in a research-planning report for the project "'+DATA.project+'".\n'+
+      'PROJECT GOAL: '+DATA.goal+'\n\n'+
+      'You answer questions about ONE decision in the plan:\n'+
+      '  Decision: '+dec.decision+'\n'+
+      '  Chosen: '+(dec.choice||'(still open)')+'\n'+
+      '  Principle: '+(dec.principle||'')+'\n'+
+      '  Why: '+(dec.why||'')+'\n\n'+
+      'PROJECT GLOSSARY:\n'+glossaryText()+'\n\n'+
+      'Answer clearly and concisely, grounded in this context; define jargon in plain language. '+
+      'If the questions reveal concepts the user did not understand, append AT THE VERY END a fenced block exactly like:\n'+
+      '```memory\n{"terms":[{"term":"...","plain":"one-line plain meaning","why":"why it matters here"}]}\n```\n'+
+      'Only include genuinely-clarified concepts; omit the block entirely if none.';
+  }
+  function parseMemory(text){
+    var m=text.match(/```memory\s*([\s\S]*?)```/), clean=text, terms=[];
+    if(m){clean=text.replace(m[0],'').trim();try{var o=JSON.parse(m[1].trim());if(o&&o.terms)terms=o.terms;}catch(e){}}
+    return {clean:clean,terms:terms};
+  }
+  async function ask(dec,convo){
+    var key=localStorage.getItem(KK);
+    if(!key) throw new Error('No API key set — click "Set API key" (bottom-right).');
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:localStorage.getItem(MK)||DATA.model,max_tokens:1024,system:sysPrompt(dec),messages:convo})});
+    if(!res.ok){var t=await res.text();throw new Error('API '+res.status+': '+t.slice(0,200));}
+    var j=await res.json();
+    return (j.content||[]).filter(function(b){return b.type==='text'}).map(function(b){return b.text}).join('');
+  }
+  function renderSaved(box,decId){
+    var dec=DATA.decisions[decId]||{}, m=mem();
+    var sterms=dec.terms||[], sfaq=dec.faq||[];
+    var seenT={}; sterms.forEach(function(t){seenT[(t.term||'').toLowerCase()]=1});
+    var seenQ={}; sfaq.forEach(function(f){seenQ[f.q]=1});
+    var lterms=(m.glossary||[]).filter(function(t){return t.dec===decId&&!seenT[(t.term||'').toLowerCase()]});
+    var lfaq=((m.faq&&m.faq[decId])||[]).filter(function(f){return !seenQ[f.q]});
+    var h='';
+    var T=sterms.map(function(t){return{t:t,u:0}}).concat(lterms.map(function(t){return{t:t,u:1}}));
+    var F=sfaq.map(function(f){return{f:f,u:0}}).concat(lfaq.map(function(f){return{f:f,u:1}}));
+    if(T.length){h+="<div class='tl-saved'><h5>terms you asked about</h5>";
+      T.forEach(function(x){h+="<div class='tl-term'><b>"+esc(x.t.term)+"</b> — "+esc(x.t.plain)+(x.u?" <span class='tl-unsv'>unsaved</span>":"")+"</div>"});h+="</div>";}
+    if(F.length){h+="<div class='tl-saved'><h5>Q&amp;A</h5>";
+      F.forEach(function(x){h+="<div class='tl-faq'><div class='q'>"+esc(x.f.q)+"</div><div>"+esc(x.f.a)+(x.u?" <span class='tl-unsv'>unsaved</span>":"")+"</div></div>"});h+="</div>";}
+    box.innerHTML=h;
+  }
+  function initWidget(node){
+    var decId=node.getAttribute('data-dec'), dec=DATA.decisions[decId]; if(!dec) return;
+    var convo=[];
+    var btn=document.createElement('button'); btn.className='tl-ask'; btn.textContent='💬 Ask about this';
+    var panel=document.createElement('div'); panel.className='tl-panel';
+    var saved=document.createElement('div'), log=document.createElement('div'); log.className='tl-log';
+    var inRow=document.createElement('div'); inRow.className='tl-in';
+    var ta=document.createElement('textarea'); ta.placeholder='Ask anything about this decision… (Cmd/Ctrl+Enter to send)';
+    var send=document.createElement('button'); send.textContent='Send';
+    inRow.appendChild(ta); inRow.appendChild(send);
+    panel.appendChild(saved); panel.appendChild(log); panel.appendChild(inRow);
+    node.appendChild(btn); node.appendChild(panel);
+    renderSaved(saved,decId);
+    btn.addEventListener('click',function(e){e.preventDefault();panel.classList.toggle('open');});
+    function addMsg(cls,who,txt){var d=document.createElement('div');d.className='tl-msg '+cls;d.innerHTML='<b>'+who+'</b> '+esc(txt);log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
+    async function go(){
+      var q=ta.value.trim(); if(!q) return; ta.value='';
+      addMsg('u','You:',q); convo.push({role:'user',content:q});
+      send.disabled=true; var wait=addMsg('a','Claude:','…thinking');
+      try{
+        var raw=await ask(dec,convo), pm=parseMemory(raw);
+        wait.innerHTML="<b>Claude:</b> "+esc(pm.clean); convo.push({role:'assistant',content:raw});
+        var m=mem(); m.faq=m.faq||{}; m.faq[decId]=m.faq[decId]||[];
+        m.faq[decId].push({q:q,a:pm.clean,ts:new Date().toISOString()});
+        m.glossary=m.glossary||[];
+        pm.terms.forEach(function(t){if(t&&t.term)m.glossary.push({term:t.term,plain:t.plain||'',why:t.why||'',dec:decId})});
+        setMem(m); renderSaved(saved,decId);
+      }catch(err){wait.className='tl-msg err';wait.innerHTML='⚠ '+esc(err.message);}
+      send.disabled=false; ta.focus();
+    }
+    send.addEventListener('click',go);
+    ta.addEventListener('keydown',function(e){if(e.key==='Enter'&&(e.metaKey||e.ctrlKey))go();});
+  }
+  function toolbar(){
+    var bar=document.createElement('div'); bar.className='tl-bar';
+    var k=document.createElement('button'); k.textContent='🔑 Set API key';
+    k.onclick=function(){var v=prompt('Anthropic API key (stored only in this browser):',localStorage.getItem(KK)||'');if(v!=null)localStorage.setItem(KK,v.trim());};
+    var ex=document.createElement('button'); ex.textContent='⬇ Export memory';
+    ex.onclick=function(){var m=mem(),blob={project:DATA.project,faq:m.faq||{},glossary:m.glossary||[]};
+      var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(blob,null,2)],{type:'application/json'}));
+      a.download='viz-memory.'+DATA.project+'.json';a.click();};
+    bar.appendChild(k); bar.appendChild(ex); document.body.appendChild(bar);
+  }
+  document.querySelectorAll('.tl-chat').forEach(initWidget); toolbar();
+})();
 """
 
 
@@ -494,7 +640,95 @@ def story_html(goal, bar, pl, nodes, rows):
     return "\n".join(H)
 
 
-def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_order):
+def _chat_blob(name, goal, pl, glossary, clarify):
+    """The grounding the in-browser chatbot reads: project goal, the full glossary (for the
+    system prompt), and per-decision context + already-absorbed FAQ/terms. Pure render of the
+    substrate — the widget invents nothing, it only asks/captures around what's here."""
+    clar_by, gloss_by = {}, {}
+    for c in clarify:
+        clar_by.setdefault(c.get("dec"), []).append(
+            {"q": c.get("q", ""), "a": c.get("a", ""), "ts": c.get("ts", "")})
+    for g in glossary:
+        if g.get("dec"):
+            gloss_by.setdefault(g["dec"], []).append(
+                {"term": g.get("term", ""), "plain": g.get("plain", ""), "why": g.get("why", "")})
+    decmap = {}
+    for n in pl:
+        did = n.get("id")
+        if not did:
+            continue
+        decmap[did] = {"decision": n.get("decision", ""), "choice": n.get("choice", ""),
+                       "principle": n.get("principle", ""), "why": n.get("why", ""),
+                       "faq": clar_by.get(did, []), "terms": gloss_by.get(did, [])}
+    data = {"project": name, "goal": goal, "model": "claude-opus-4-8",
+            "glossary": [{"term": g.get("term", ""), "plain": g.get("plain", ""),
+                          "why": g.get("why", "")} for g in glossary],
+            "decisions": decmap}
+    # escape '<' so the JSON can never break out of its <script> host
+    return json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+
+
+def pipeline_html(pl):
+    """The project as a left-to-right PIPELINE: one stage per phase (in first-appearance order),
+    coloured by aggregate status — green=all settled, blue=holds the main thread, amber=has an
+    open decision. Derived from the plan; no per-project authoring."""
+    SC = {"done": "#16a34a", "open": "#d97706", "current": "#2563eb"}
+    mt = plan.main_thread(pl)
+    mt_id = mt.get("id") if mt else None
+    groups = spine_groups(pl)
+    cards = []
+    for i, (ph, decs) in enumerate(groups):
+        sts = [d.get("status", "open") for d in decs]
+        cur = any(d.get("id") == mt_id for d in decs)
+        st = "current" if cur else ("open" if any(s == "open" for s in sts) else "done")
+        ndone = sum(1 for s in sts if s in ("decided", "verified"))
+        now = "<span class='pp-now'>● now</span>" if cur else ""
+        cards.append(f"<div class='pp-stage' style='border-top-color:{SC[st]}'>"
+                     f"<div class='pp-t'>{_e(ph or '—')}{now}</div>"
+                     f"<div class='pp-s'>{ndone}/{len(decs)} settled</div></div>")
+        if i < len(groups) - 1:
+            cards.append("<div class='pp-arr'>▶</div>")
+    return ("<h2 class='sec'>Pipeline — the system, phase by phase</h2>"
+            "<div class='pp'>" + "".join(cards) + "</div>")
+
+
+def _gloss_map(glossary):
+    m = {}
+    for g in glossary or []:
+        t = (g.get("term") or "").strip()
+        if len(t) >= 2 and g.get("plain"):
+            m.setdefault(t.lower(), g["plain"])
+    return m
+
+
+def _gloss(text_escaped, gmap):
+    """Wrap the first occurrence of each glossary term with a hover-tooltip <abbr> (dotted)."""
+    for term in sorted(gmap, key=len, reverse=True):
+        pat = re.compile(r"(?<![\w-])(" + re.escape(_e(term)) + r")(?![\w-])", re.I)
+        text_escaped = pat.sub(
+            lambda mo: f"<abbr class='gl-term' title=\"{_e(gmap[term])}\">{mo.group(1)}</abbr>",
+            text_escaped, count=1)
+    return text_escaped
+
+
+def glossary_html(glossary):
+    seen, rows = set(), []
+    for g in sorted(glossary or [], key=lambda x: (x.get("term") or "").lower()):
+        t = (g.get("term") or "").strip()
+        if not t or t.lower() in seen or not g.get("plain"):
+            continue
+        seen.add(t.lower())
+        rows.append(f"<div class='gl-row'><b>{_e(t)}</b> — {_e(g['plain'])}</div>")
+    if not rows:
+        return ""
+    return ("<details class='gl-box'><summary>Glossary — every term in plain words</summary>"
+            + "".join(rows) + "</details>")
+
+
+def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_order,
+                glossary=None, clarify=None):
+    glossary, clarify = glossary or [], clarify or []
+    gmap = _gloss_map(glossary)
     summ = plan.summary(pl)
     counts = summ["counts"]
     mt = plan.main_thread(pl)
@@ -504,7 +738,7 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
 
     H = ['<!doctype html><html lang="en"><head><meta charset="utf-8">',
          '<meta name="viewport" content="width=device-width,initial-scale=1">',
-         f"<title>{_e(name)} — research tree</title><style>{CSS}</style></head><body><div class='wrap'>"]
+         f"<title>{_e(name)} — research tree</title><style>{CSS}{CHAT_CSS}</style></head><body><div class='wrap'>"]
 
     # ---- header / TLDR ----
     H.append("<div class='hdr'>")
@@ -521,6 +755,9 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
         H.append("<div class='rej'><b>don't drift back:</b> " +
                  " · ".join(_e(a["not_this"]) for a in avoided if a.get("not_this")) + "</div>")
     H.append("</div>")  # hdr
+
+    # ---- pipeline (the system, phase by phase) ----
+    H.append(pipeline_html(pl))
 
     # ---- legend ----
     H.append("<div class='legend'>"
@@ -566,10 +803,11 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
             pl_tag = "<span class='pill-tag'>◆ pillar</span>" if n.get("pillar") else ""
             H.append("<details class='dec'><summary>"
                      f"<span class='gl' style='color:{DEC_COLOR.get(st,'#64748b')}'>{DEC_ICON.get(st,'?')}</span>"
-                     f"<span class='dsum'><span class='dq'>{_e(n.get('decision',''))}</span>{you}{pl_tag}"
-                     f"<br><span class='dch'>→ {_e(n.get('choice',''))}</span></span></summary>"
+                     f"<span class='dsum'><span class='dq'>{_gloss(_e(n.get('decision','')), gmap)}</span>{you}{pl_tag}"
+                     f"<br><span class='dch'>→ {_gloss(_e(n.get('choice','')), gmap)}</span></span></summary>"
                      f"<div class='dwhy'><span class='pr'>{_e(n.get('principle',''))}</span> "
-                     f"{_e(n.get('why',''))}</div></details>")
+                     f"{_e(n.get('why',''))}</div>"
+                     f"<div class='tl-chat' data-dec=\"{_e(n.get('id',''))}\"></div></details>")
     H.append("</div></div>")
     # right: search tree
     H.append("<div><h2 class='sec'>Search tree — the directions explored</h2>"
@@ -578,9 +816,17 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
     H.append("</div></div>")
     H.append("</div>")  # cols
 
+    H.append(glossary_html(glossary))
+
     H.append(f"<div class='foot'>Trainlint · derived from research/plan.{_e(name)}.jsonl + "
-             f"log.{_e(name)}.jsonl + knowledge.{_e(name)}.jsonl — never hand-maintained.</div>")
-    H.append("</div></body></html>")
+             f"log.{_e(name)}.jsonl + knowledge.{_e(name)}.jsonl — never hand-maintained.<br>"
+             "ask a decision's chatbot, then <b>Export memory</b> → "
+             f"<code>viz.py {_e(name)} --absorb &lt;file&gt;</code> to fold it into the glossary + FAQ.</div>")
+    H.append("</div>")  # wrap
+    H.append('<script id="tl-data" type="application/json">'
+             + _chat_blob(name, goal, pl, glossary, clarify) + "</script>")
+    H.append("<script>" + CHAT_JS + "</script>")
+    H.append("</body></html>")
     return "\n".join(H)
 
 
@@ -621,6 +867,8 @@ def _load_project(name):
     nodes = tree.build_tree(tree.load_events(name, facts), facts)
     pl = plan.load(name)
     know = tree._load_jsonl(ROOT / f"knowledge.{name}.jsonl")
+    glossary = tree._load_jsonl(ROOT / f"glossary.{name}.jsonl")
+    clarify = tree._load_jsonl(ROOT / f"clarify.{name}.jsonl")
     gp = ROOT / f"goal.{name}.txt"
     goal, bar = split_goal(gp.read_text(encoding="utf-8") if gp.exists() else "")
     kinds = {}
@@ -635,7 +883,7 @@ def _load_project(name):
             phase_order.append(n.get("phase", ""))
     return {"name": name, "facts": facts, "nodes": nodes, "pl": pl, "know": know,
             "goal": goal, "bar": bar, "kinds": kinds, "id2phase": id2phase,
-            "phase_order": phase_order}
+            "phase_order": phase_order, "glossary": glossary, "clarify": clarify}
 
 
 def generate(name):
@@ -645,16 +893,71 @@ def generate(name):
     outdir.mkdir(exist_ok=True)
     htmlpath = outdir / f"{name}.html"
     htmlpath.write_text(render_html(d["name"], d["goal"], d["bar"], d["pl"], d["nodes"],
-                                    d["know"], d["kinds"], d["id2phase"], d["phase_order"]),
+                                    d["know"], d["kinds"], d["id2phase"], d["phase_order"],
+                                    glossary=d["glossary"], clarify=d["clarify"]),
                         encoding="utf-8")
     return htmlpath, d
 
 
+def absorb(name, blob_path):
+    """Fold an exported `viz-memory.<name>.json` (what the in-browser chatbots captured) back
+    into the substrate, then regenerate. Glossary terms append to glossary.<name>.jsonl — the
+    SAME file /trainlint:quiz drills — so a concept the operator kept asking about becomes
+    drillable; the raw Q&A appends to clarify.<name>.jsonl, which viz renders as an FAQ under
+    each decision. Dedupe so re-absorbing the same export is a no-op."""
+    import json as _json
+    blob = _json.loads(Path(blob_path).read_text(encoding="utf-8"))
+
+    gpath = ROOT / f"glossary.{name}.jsonl"
+    have = {e.get("term", "").lower() for e in (tree._load_jsonl(gpath) if gpath.exists() else [])}
+    added = 0
+    with gpath.open("a", encoding="utf-8") as f:
+        for t in blob.get("glossary", []):
+            term = (t.get("term") or "").strip()
+            if term and term.lower() not in have:
+                rec = {"term": term, "plain": t.get("plain", ""), "why": t.get("why", "")}
+                if t.get("dec"):
+                    rec["dec"] = t["dec"]
+                f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+                have.add(term.lower())
+                added += 1
+
+    cpath = ROOT / f"clarify.{name}.jsonl"
+    seen = {(e.get("dec"), e.get("q")) for e in (tree._load_jsonl(cpath) if cpath.exists() else [])}
+    cadded = 0
+    with cpath.open("a", encoding="utf-8") as f:
+        for dec, items in (blob.get("faq") or {}).items():
+            for it in items:
+                q = (it.get("q") or "").strip()
+                if q and (dec, q) not in seen:
+                    f.write(_json.dumps({"dec": dec, "q": q, "a": it.get("a", ""),
+                                         "ts": it.get("ts", "")}, ensure_ascii=False) + "\n")
+                    seen.add((dec, q))
+                    cadded += 1
+
+    htmlpath, _ = generate(name)
+    print(f"absorbed {added} glossary term(s) + {cadded} FAQ entr(y/ies) into "
+          f"{gpath.name} + {cpath.name}\nregenerated HTML: {htmlpath}")
+
+
 def main():
-    """One project, one self-contained HTML report. The argument is the project name;
-    default is the active project."""
-    argv = [a for a in sys.argv[1:] if not a.startswith("-")]
-    name = tree._active(argv[0] if argv else None)
+    """One project, one self-contained HTML report. The argument is the project name (default
+    = active project). `--absorb <blob.json>` instead folds an exported memory blob into the
+    substrate and regenerates."""
+    args = sys.argv[1:]
+    name_args = [a for a in args if not a.startswith("-")]
+    blob = None
+    if "--absorb" in args:
+        i = args.index("--absorb")
+        blob = args[i + 1] if i + 1 < len(args) else None
+        if not blob:
+            sys.exit("usage: viz.py [project] --absorb <viz-memory.json>")
+        # the project name is any non-flag arg that isn't the blob path
+        name_args = [a for a in name_args if a != blob]
+    name = tree._active(name_args[0] if name_args else None)
+    if blob:
+        absorb(name, blob)
+        return
     htmlpath, d = generate(name)
     print(stdout_summary(name, d["goal"], d["bar"], d["pl"], d["nodes"], d["know"], htmlpath))
 
