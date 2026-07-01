@@ -91,6 +91,19 @@ Present this full picture to me FIRST and let me correct it.
    touches this decision). **WRITE each decision to `research/plan.<name>.jsonl` AS YOU CONFIRM IT —
    incrementally, not all at the end** (keep the header comment). So if the conversation diverges,
    the progress already on disk survives — the plan is never "started but unwritten".
+   **Every decision ALSO carries these (the report renders them; an empty field renders empty):**
+   `"plain"` — ONE high-level, jargon-free sentence saying what the decision IS (the report LEADS
+   each decision with this; ≤25 words, NO `<|token|>`/regex/filename detail — that lives in the
+   folded full text); `"level"` — `"high"` for a strategic bet that changes the product, or
+   `"impl"` for a code-level contract/detail (the report groups **Strategy** first, **Implementation**
+   folded below). For any decision that DEFINES a data format, add `"examples"`: a list of
+   `{"cap": "<one-line caption>", "code": "<a REAL sample READ from the data — never invented>"}`
+   (3-4 of them; the report renders each `code` as a code block — real tokens/rows, not prose).
+   **Also create two project-level files the report renders (both live in `research/`):**
+   `focus.<name>.jsonl` — the CURRENT trial-and-error work, one line each `{"title","decision",
+   "status":"trying|blocked|done","trying":"<what we're testing right now>","next":"<the next
+   experiment>"}`; and `pipeline.<name>.jsonl` — the REAL data flow as ordered stages
+   `{"label","note"}` (raw data → model → output → consumer), NOT the decision phases.
    **`decided` ≠ built.** `decided` means a choice is TYPED with a rationale — it does NOT mean
    anything was made. A decision counts as **built** only when it names an `"artifact"` (a path/glob
    the choice produces) AND that artifact exists on disk; the surfaces show built-of-decided (`0/8
@@ -103,8 +116,8 @@ Present this full picture to me FIRST and let me correct it.
    Mark exactly ONE decision `"load_bearing": true` — the open decision that most gates the rest
    (the cheapest test that could invalidate the whole plan). That one becomes the **main thread**.
    Also mark the **2-4 PILLARS** `"pillar": true` — the project's CORE dimensions, the things it
-   fundamentally IS (e.g. the codec contract, the text/audio layout/interleave, the loss/abstain
-   behavior). Pillars stay in the compass every turn EVEN WHEN decided, so a core dimension can't
+   fundamentally IS. Every pillar MUST be `"level": "high"` (a code-level contract can't be a
+   pillar — the report gate flags an `impl` pillar). Pillars stay in the compass every turn EVEN WHEN decided, so a core dimension can't
    silently drop out of view. (`load_bearing` = the one thing to drive NEXT; `pillar` = a thing the
    project always rests on.) And when you write the GOAL (step 2), NAME the pillars in it — don't
    collapse a multi-component project into the single flashiest component.
@@ -170,21 +183,28 @@ Present this full picture to me FIRST and let me correct it.
    - **Everything else** — one line: "<M> still open across <phase>→<phase> — ask about any, or
      re-run `/trainlint:plan <id>` to drill one." A pointer, not a dump.
 
-   **End by returning the HTML report path.** After the prose report, render the visual report and
-   hand me its path as the final line — `/trainlint:plan` and `/trainlint:execute-and-report` BOTH
-   close the same way, on `HTML: <path>`. Run `python3 "${CLAUDE_PLUGIN_ROOT}/research/viz.py"
-   <project>` and surface the `HTML: <path>` line it prints. Before any experiment this is fine, not
-   an empty tool: `viz.py` detects the planning stage and renders the plan story (motivation · goal ·
-   main thread · next) over a full-width decision spine, suppressing the empty timeline/tree. The
-   prose report is still the substance and the main thread is still the destination — the HTML link
-   is just how every plan/execute turn signs off, so I always have the one-glance picture to open.
+   **End by rendering the report AND putting the picture in my hand.** After the prose report, run
+   `python3 "${CLAUDE_PLUGIN_ROOT}/research/viz.py" <project>` — it writes three views and prints
+   three sign-off lines: `HTML: <path>` (the interactive report), `SLIDES: <path>` (the offline
+   deck), and `MOBILE: <path>` (a phone-shaped card, `<name>.mobile.png`). `/trainlint:plan` and
+   `/trainlint:execute-and-report` BOTH close the same way. Do TWO things with that output:
+   1. **Surface all three lines** verbatim at the end of the report (`HTML:` / `SLIDES:` / `MOBILE:`).
+      A path is fine on a laptop. Before any experiment this is not an empty tool: `viz.py` detects
+      the planning stage and renders the plan story (motivation · goal · main thread · next) over a
+      full-width decision spine, suppressing the empty timeline/tree.
+   2. **`SendUserFile` the `MOBILE:` file** — an `HTML: /home/.../viz/<name>.html` path is useless on
+      a phone, so send the `.mobile.png` card so it previews INLINE as a zoomable image (the goal ·
+      stance · pillars · main thread at a glance). This is the "lands in my hand" step; don't just
+      name the path, SEND it.
 
    **This is enforced, not just asked.** A finished report is prose, not a tool action, so it used to
    reach no hook — the voice rules were persuasion the model drops at large context. The `Stop` hook
    (`hooks/reportcheck.py`) now reads the emitted report: if it walks the plan but skips the stance
    line or the map, leads with bare decision-ids, leans on undefined jargon (`cu_seqlens`, `TP=4`),
-   or **omits the `HTML: <path>` sign-off** (the report wasn't rendered), it bounces ONCE for a
-   rewrite. So the layout above — including running `viz.py` — is a contract the doorman checks, not a suggestion.
+   **omits the `HTML: <path>` sign-off** (the report wasn't rendered), or **omits the `MOBILE:` line
+   or never `SendUserFile`s the phone preview** (the picture never reached my hand), it bounces ONCE
+   for a rewrite. So the layout above — render `viz.py`, surface all three lines, send the mobile
+   card — is a contract the doorman checks, not a suggestion.
 
 If the plan ends up only partly written (we ran out of room, got pulled away), that's fine — the
 SessionStart briefing flags a registered-but-unwritten plan, the understanding-gate flags the

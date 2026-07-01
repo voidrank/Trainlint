@@ -76,6 +76,15 @@ def _e(s):
     return html.escape(str(s), quote=True)
 
 
+def _ec(s):
+    """Escape HTML, then show the DATA as code: (1) markdown `...` spans -> <code>, and
+    (2) any bare <|...|> token (speaker/control markers) -> <code>, even without backticks —
+    so data tokens never render as plain prose. The lookbehind avoids double-wrapping (1)'s output."""
+    out = re.sub(r"`([^`]+)`", r"<code>\1</code>", _e(s))
+    out = re.sub(r"(?<!<code>)(&lt;\|[^|]*\|&gt;)", r"<code>\1</code>", out)
+    return out
+
+
 def _natkey(s):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", str(s))]
 
@@ -368,6 +377,11 @@ h2.sec{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--
 .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:18px;align-items:start}
 @media(max-width:820px){.cols{grid-template-columns:1fr}}
 .phase{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#94a3b8;margin:12px 8px 4px;font-weight:700}
+.implgrp{margin-top:6px;border-top:1px dashed #e2e8f0}
+.implgrp>summary{cursor:pointer;list-style:none;user-select:none}
+.implgrp>summary::-webkit-details-marker{display:none}
+.implgrp>summary::before{content:'▸ ';color:#94a3b8}
+.implgrp[open]>summary::before{content:'▾ '}
 details.dec{border-bottom:1px solid #f1f5f9;padding:2px 8px}
 details.dec:last-child{border-bottom:0}
 details.dec>summary{list-style:none;cursor:pointer;display:flex;gap:9px;align-items:baseline;padding:8px 0}
@@ -380,13 +394,39 @@ details.dec>summary::-webkit-details-marker{display:none}
 .pill-tag{font-size:10px;color:#0369a1;background:#e0f2fe;border-radius:6px;padding:1px 6px;margin-left:4px}
 .dwhy{font-size:12.5px;color:#475569;padding:0 0 9px 24px}
 .dwhy .pr{display:inline-block;background:#f1f5f9;border-radius:6px;padding:1px 7px;color:#334155;font-size:11.5px}
+.draw{margin:2px 0 9px 24px}
+.draw>summary{cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#2563eb;user-select:none;list-style:none}
+.draw>summary::-webkit-details-marker{display:none}
+.draw>summary::before{content:'▸ ';color:#94a3b8}
+.draw[open]>summary::before{content:'▾ '}
+.dex{margin:6px 0 2px 6px}
+.exitem{margin-bottom:10px}
+.excap{font-size:11px;color:#64748b;margin-bottom:4px}
+.excode{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#0f172a;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:8px 11px;margin:0;white-space:pre;overflow-x:auto;line-height:1.55}
+.dchfull{font-size:12px;color:#475569;padding:6px 0 2px 10px;margin-top:4px;white-space:pre-wrap;border-left:2px solid #e2e8f0}
+.focussec{margin:16px 0 6px;border:1px solid #bfdbfe;border-radius:10px;padding:14px 16px;background:#eff6ff}
+.fshdr{font-size:13px;font-weight:700;letter-spacing:.03em;color:#1e3a8a;margin-bottom:11px}
+.fcard{background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:10px 12px;margin-bottom:9px}
+.fcard:last-child{margin-bottom:0}
+.fhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px}
+.fst{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#fff;padding:2px 7px;border-radius:11px}
+.ftitle{font-size:12.5px;font-weight:600;color:#0f172a}
+.fdec{font-size:11px;color:#64748b;font-family:ui-monospace,Menlo,monospace}
+.ftry{font-size:12px;color:#334155;line-height:1.5}
+.fnext{font-size:12px;color:#475569;margin-top:5px}
+.datasec{margin:18px 0 6px;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;background:#fbfcfe}
+.dshdr{font-size:13px;font-weight:700;letter-spacing:.03em;color:#0f172a;margin-bottom:12px}
+.dsblock{margin-bottom:14px;padding-left:12px;border-left:3px solid #2563eb}
+.dsblock:last-child{margin-bottom:0}
+.dstitle{font-size:12.5px;font-weight:600;color:#1e293b;margin-bottom:7px}
 .treecap{font-size:11.5px;color:var(--mut);padding:2px 10px 10px}
 .treecap b{color:#334155}
 .empty{color:var(--mut);font-size:13px;padding:22px 16px;text-align:center}
 .foot{color:#94a3b8;font-size:11.5px;text-align:center;margin:22px 0 6px}
 .pp{display:flex;flex-wrap:wrap;align-items:stretch;gap:6px;margin:4px 0 6px}
-.pp-stage{flex:1 1 112px;min-width:112px;background:#fff;border:1px solid var(--line,#e2e8f0);border-top:3px solid;border-radius:9px;padding:8px 10px}
+.pp-stage{flex:1 1 130px;min-width:130px;background:#fff;border:1px solid var(--line,#e2e8f0);border-top:3px solid #2563eb;border-radius:9px;padding:8px 10px}
 .pp-t{font-weight:700;font-size:12.5px}
+.pp-note{color:var(--mut,#64748b);font-size:11px;margin-top:3px;line-height:1.4;font-family:ui-monospace,Menlo,monospace}
 .pp-now{color:#2563eb;font-size:10px;font-weight:700;margin-left:5px}
 .pp-s{color:var(--mut,#64748b);font-size:11px;margin-top:2px}
 .pp-arr{align-self:center;color:#cbd5e1;font-size:12px}
@@ -620,7 +660,7 @@ def _want_parts(goal, bar, pl):
             head = head[:m.start()]
     head = head.strip().rstrip(".;—- ")
     headline = re.split(r"(?<=[.])\s+", head)[0] if head else (g or "— no goal set yet —")
-    bullets = [(p.get("id", ""), _trunc(p.get("choice") or p.get("decision", ""), 96))
+    bullets = [(p.get("id", ""), _trunc(p.get("plain") or p.get("choice") or p.get("decision", ""), 130))
                for p in plan.pillars(pl)]
     done = bar
     if not done:
@@ -678,15 +718,15 @@ def story_beats(goal, bar, pl, nodes, rows):
     beats = []
     # 1 · 想做什么 — 总分总: headline sentence · the core pillars (bulleted) · the done-bar
     head, bullets, done = _want_parts(goal, bar, pl)
-    beats.append({"cls": "want", "label": "🎯 想做什么", "head": head,
+    beats.append({"cls": "want", "label": "🎯 WHAT WE WANT", "head": head,
                   "bullets": bullets, "tail": (f"<b>done</b> = {_e(done)}" if done else "")})
     # 2 · 遇到问题
     if probs:
-        beats.append({"cls": "prob", "label": "⛰ 遇到问题",
+        beats.append({"cls": "prob", "label": "⛰ THE PROBLEM",
                       "head": _join(probs, lambda p: f"[{p[0]}] {p[1]}", 2, "walls"),
                       "sub": f"{len(probs)} wall(s) still standing"})
     else:
-        beats.append({"cls": "prob", "label": "⛰ 遇到问题",
+        beats.append({"cls": "prob", "label": "⛰ THE PROBLEM",
                       "head": "every wall hit so far has been closed"})
     # 3 · bottleneck (the load-bearing open decision)
     if mt:
@@ -697,19 +737,19 @@ def story_beats(goal, bar, pl, nodes, rows):
                       "head": "no open bottleneck — every decision is settled"})
     # 4 · 干了什么
     if did:
-        beats.append({"cls": "did", "label": "🔧 干了什么",
+        beats.append({"cls": "did", "label": "🔧 WHAT WE DID",
                       "head": _join(did, lambda x: f"{x[0]} [{x[1]}] {x[2]}", 3, "moves"),
                       "sub": f"{len(did)} direction(s) resolved or backtracked"})
     else:
-        beats.append({"cls": "did", "label": "🔧 干了什么",
+        beats.append({"cls": "did", "label": "🔧 WHAT WE DID",
                       "head": "no verdicts or backtracks logged yet"})
     # 5 · 要做什么
     if mt:
-        beats.append({"cls": "next", "label": "➡️ 要做什么",
-                      "head": mt.get("choice", "") or "drive the main thread to a verdict",
+        beats.append({"cls": "next", "label": "➡️ WHAT'S NEXT",
+                      "head": mt.get("plain") or mt.get("decision") or "drive the main thread to a verdict",
                       "sub": f"{n_open} decision(s) still open" if n_open else ""})
     else:
-        beats.append({"cls": "next", "label": "➡️ 要做什么",
+        beats.append({"cls": "next", "label": "➡️ WHAT'S NEXT",
                       "head": "harden, verify the unverified, and ship"})
     return beats
 
@@ -720,13 +760,13 @@ def _render_beats(beats):
     five-beat arc and the planning-stage arc so they stay visually identical."""
     H = ["<div class='story'>"]
     for b in beats:
-        body = [f"<div class='bt'>{_e(b['head'])}"]
+        body = [f"<div class='bt'>{_ec(b['head'])}"]
         if b.get("sub"):
-            body.append(f"<span class='sm'>{_e(b['sub'])}</span>")
+            body.append(f"<span class='sm'>{_ec(b['sub'])}</span>")
         if b.get("bullets"):
             body.append("<ul class='blist'>")
             for bid, btext in b["bullets"]:
-                body.append(f"<li><b>{_e(bid)}</b> — {_e(btext)}</li>")
+                body.append(f"<li><b>{_e(bid)}</b> — {_ec(btext)}</li>")
             body.append("</ul>")
         if b.get("tail"):
             body.append(f"<div class='tail'>{b['tail']}</div>")  # tail is pre-escaped HTML
@@ -762,13 +802,70 @@ def planning_story_beats(motivation, goal, bar, pl):
         beats.append({"cls": "neck", "label": "🔻 MAIN THREAD", "head": mt.get("decision", ""),
                       "sub": f"the one open decision everything waits on · {mt.get('id','')}"})
         beats.append({"cls": "next", "label": "➡️ NEXT",
-                      "head": mt.get("choice", "") or "settle this decision next",
+                      "head": mt.get("plain") or mt.get("decision") or "settle this decision next",
                       "sub": f"{n_open} decision(s) still open" if n_open else ""})
     return beats
 
 
 def planning_story_html(motivation, goal, bar, pl):
     return _render_beats(planning_story_beats(motivation, goal, bar, pl))
+
+
+def focus_section_html(name):
+    """CURRENT FOCUS — the active trial-and-error work right now (distinct from the main thread,
+    which is ONE decision, and pillars, which are settled core dimensions). Reads
+    research/focus.<name>.jsonl: {id, title, decision?, status, trying, next?}. Empty file -> ''."""
+    fp = Path(__file__).resolve().parent / f"focus.{name}.jsonl"
+    if not fp.exists():
+        return ""
+    items = []
+    try:
+        for line in fp.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                items.append(json.loads(line))
+    except Exception:
+        return ""
+    if not items:
+        return ""
+    color = {"trying": "#2563eb", "blocked": "#dc2626", "done": "#16a34a"}
+    cards = []
+    for it in items:
+        st = str(it.get("status", "trying")).lower()
+        dec = f"<span class='fdec'>{_e(it.get('decision',''))}</span>" if it.get("decision") else ""
+        nxt = f"<div class='fnext'><b>next:</b> {_ec(it.get('next',''))}</div>" if it.get("next") else ""
+        cards.append(
+            f"<div class='fcard'>"
+            f"<div class='fhead'><span class='fst' style='background:{color.get(st,'#64748b')}'>{_e(st)}</span>"
+            f"<span class='ftitle'>{_ec(it.get('title',''))}</span>{dec}</div>"
+            f"<div class='ftry'>{_ec(it.get('trying',''))}</div>{nxt}</div>")
+    return ("<div class='focussec'><div class='fshdr'>🎯 CURRENT FOCUS — what we're actively trying now</div>"
+            + "".join(cards) + "</div>")
+
+
+def data_section_html(pl):
+    """A dedicated, always-visible DATA panel: for each decision that carries `examples`, show a
+    high-level title (its plain summary) then the real samples as code blocks. This is the one
+    place that DEMONSTRATES what data the pipeline moves — so it isn't buried in the spine."""
+    blocks = []
+    for n in (pl or []):
+        ex = n.get("examples") or []
+        if not ex:
+            continue
+        title = _ec(n.get("plain") or n.get("decision", ""))
+        rows = []
+        for x in ex:
+            if isinstance(x, dict):
+                cap, code = _ec(x.get("cap", "")), _e(x.get("code", ""))
+                rows.append((f"<div class='excap'>{cap}</div>" if cap else "")
+                            + f"<pre class='excode'>{code}</pre>")
+            else:
+                rows.append(f"<pre class='excode'>{_e(str(x))}</pre>")
+        blocks.append(f"<div class='dsblock'><div class='dstitle'>{title}</div>{''.join(rows)}</div>")
+    if not blocks:
+        return ""
+    return ("<div class='datasec'><div class='dshdr'>DATA — what the rewriter reads &amp; writes</div>"
+            + "".join(blocks) + "</div>")
 
 
 def _quiz_lead(s, cap=180):
@@ -877,27 +974,31 @@ def _chat_blob(name, goal, pl, glossary, clarify):
     return json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
 
 
-def pipeline_html(pl):
-    """The project as a left-to-right PIPELINE: one stage per phase (in first-appearance order),
-    coloured by aggregate status — green=all settled, blue=holds the main thread, amber=has an
-    open decision. Derived from the plan; no per-project authoring."""
-    SC = {"done": "#16a34a", "open": "#d97706", "current": "#2563eb"}
-    mt = plan.main_thread(pl)
-    mt_id = mt.get("id") if mt else None
-    groups = spine_groups(pl)
+def pipeline_html(name):
+    """The REAL data flow, authored per-project in research/pipeline.<name>.jsonl as an ordered
+    list of {label, note} stages, rendered left-to-right with arrows. No file -> nothing. (The old
+    version laid out the plan's PHASES with arrows, which was misleading — phases are decision
+    categories, not a processing flow.)"""
+    fp = Path(__file__).resolve().parent / f"pipeline.{name}.jsonl"
+    if not fp.exists():
+        return ""
+    stages = []
+    try:
+        for line in fp.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                stages.append(json.loads(line))
+    except Exception:
+        return ""
+    if not stages:
+        return ""
     cards = []
-    for i, (ph, decs) in enumerate(groups):
-        sts = [d.get("status", "open") for d in decs]
-        cur = any(d.get("id") == mt_id for d in decs)
-        st = "current" if cur else ("open" if any(s == "open" for s in sts) else "done")
-        ndone = sum(1 for s in sts if s in ("decided", "verified"))
-        now = "<span class='pp-now'>● now</span>" if cur else ""
-        cards.append(f"<div class='pp-stage' style='border-top-color:{SC[st]}'>"
-                     f"<div class='pp-t'>{_e(ph or '—')}{now}</div>"
-                     f"<div class='pp-s'>{ndone}/{len(decs)} settled</div></div>")
-        if i < len(groups) - 1:
+    for i, s in enumerate(stages):
+        cards.append(f"<div class='pp-stage'><div class='pp-t'>{_ec(s.get('label',''))}</div>"
+                     f"<div class='pp-note'>{_ec(s.get('note',''))}</div></div>")
+        if i < len(stages) - 1:
             cards.append("<div class='pp-arr'>▶</div>")
-    return ("<h2 class='sec'>Pipeline — the system, phase by phase</h2>"
+    return ("<h2 class='sec'>Pipeline — the data flow</h2>"
             "<div class='pp'>" + "".join(cards) + "</div>")
 
 
@@ -981,12 +1082,14 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
         H.append("<div class='rej'><b>⚠️ goal↔scope drift:</b> " + _e(_gd) + "</div>")
     H.append("</div>")  # hdr
 
-    # ---- pipeline (the system, phase by phase) ----
-    # Only meaningful when phases form an actual processing flow (data→preproc→model→train→eval).
-    # At planning stage the phases are decision CATEGORIES, not a pipeline, and the abstract
-    # "N/M settled" score just duplicates the spine below — so skip it.
-    if not planning:
-        H.append(pipeline_html(pl))
+    # ---- CURRENT FOCUS: the active trial-and-error work right now ----
+    H.append(focus_section_html(name))
+
+    # ---- DATA section: the one place that DEMONSTRATES the data types (both modes) ----
+    H.append(data_section_html(pl))
+
+    # ---- pipeline: the REAL data flow (authored in pipeline.<name>.jsonl; empty -> nothing) ----
+    H.append(pipeline_html(name))
 
     # ---- legend ----
     if planning:
@@ -1031,23 +1134,64 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
 
     # ---- decision spine (full-width at planning stage; beside the search tree once it exists) ----
     spine = ["<div><h2 class='sec'>"
-             + ("Decisions — the plan, phase by phase" if planning else "Decision spine — what we know")
+             + ("Decisions — strategy first, then implementation" if planning else "Decision spine — strategy vs implementation")
              + "</h2><div class='card'>"]
-    for ph, decs in spine_groups(pl):
-        spine.append(f"<div class='phase'>{_e(ph)}</div>")
-        for n in decs:
+    # Group by ALTITUDE, not phase: the high-level bets up front; the code-level contracts &
+    # details folded away under Implementation, so strategy isn't drowned in detail.
+    _lvl_groups = [
+        ("Strategy — the high-level bets", [n for n in pl if n.get("level", "high") != "impl"], False),
+        ("Implementation — code-level contracts & detail", [n for n in pl if n.get("level") == "impl"], True),
+    ]
+    for _gname, _decs, _collapse in _lvl_groups:
+        if not _decs:
+            continue
+        if _collapse:
+            spine.append(f"<details class='implgrp'><summary class='phase'>{_e(_gname)} · {len(_decs)}</summary>")
+        else:
+            spine.append(f"<div class='phase'>{_e(_gname)}</div>")
+        for n in _decs:
             st = n.get("status", "open")
             you = "<span class='you'>← you are here</span>" if (mt and n.get("id") == mt.get("id")) else ""
             pl_tag = "<span class='pill-tag'>◆ pillar</span>" if n.get("pillar") else ""
             _g, _c = _dec_glyph(n)
-            spine.append("<details class='dec'><summary>"
+            # SUMMARY up front = one plain-language sentence (the `plain` field); fall back to the
+            # choice only if a decision hasn't got one yet (the lint flags those).
+            plain = _ec(n.get("plain", "")) or _gloss(_e(n.get("choice", "")), gmap)
+            # EXAMPLES go in a COLLAPSED foldable block — clear, indented, out of the way until opened.
+            ex = n.get("examples") or []
+            ex_html = ""
+            if ex:
+                rows = []
+                for x in ex:
+                    if isinstance(x, dict):  # {cap, code}: a caption + a real code block
+                        cap = _ec(x.get("cap", ""))
+                        code = _e(x.get("code", ""))
+                        rows.append(f"<div class='exitem'>"
+                                    + (f"<div class='excap'>{cap}</div>" if cap else "")
+                                    + f"<pre class='excode'>{code}</pre></div>")
+                    else:  # legacy string -> still put it in a code block, never loose prose
+                        rows.append(f"<div class='exitem'><pre class='excode'>{_e(str(x))}</pre></div>")
+                # examples OPEN by default — the whole point is to SEE them, not dig two folds down
+                ex_html = (f"<details class='draw' open><summary>examples ({len(ex)})</summary>"
+                           f"<div class='dex'>{''.join(rows)}</div></details>")
+            # the dense original decision text also folds away — open only if you want the full rationale
+            choice_full = _gloss(_e(n.get("choice", "")), gmap)
+            choice_fold = (f"<details class='draw'><summary>full decision text</summary>"
+                           f"<div class='dchfull'>{choice_full}</div></details>") if choice_full else ""
+            # a decision that carries examples opens by default so its code blocks are visible on load
+            dec_open = " open" if ex else ""
+            spine.append(f"<details class='dec'{dec_open}><summary>"
                          f"<span class='gl' style='color:{_c}'>{_g}</span>"
                          f"<span class='dsum'><span class='dq'>{_gloss(_e(n.get('decision','')), gmap)}</span>{you}{pl_tag}"
-                         f"<br><span class='dch'>→ {_gloss(_e(n.get('choice','')), gmap)}</span></span></summary>"
+                         f"<br><span class='dch'>{plain}</span></span></summary>"
                          f"<div class='dwhy'><span class='pr'>{_e(n.get('principle',''))}</span> "
-                         f"{_e(n.get('why',''))}</div>"
+                         f"{_ec(n.get('why',''))}</div>"
+                         f"{ex_html}"
+                         f"{choice_fold}"
                          f"<div class='tl-quiz' data-dec=\"{_e(n.get('id',''))}\"></div>"
                          f"<div class='tl-chat' data-dec=\"{_e(n.get('id',''))}\"></div></details>")
+        if _collapse:
+            spine.append("</details>")
     spine.append("</div></div>")
     if planning:
         H.append("".join(spine))
@@ -1186,7 +1330,7 @@ def render_slides(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_
 
     # 3 - pipeline (only once phases form a real processing flow)
     if not planning:
-        secs.append(_sec("<h2 class='sec'>The system, phase by phase</h2>" + pipeline_html(pl)))
+        secs.append(_sec("<h2 class='sec'>The data flow</h2>" + pipeline_html(name)))
 
     # 4 - timeline
     if not planning and rows:
@@ -1312,10 +1456,10 @@ def _load_project(name):
 
 
 def generate(name):
-    """Write BOTH views of one project from a single load — the interactive report
-    research/viz/<name>.html and the offline slide deck <name>.slides.html — and return
-    (htmlpath, slidespath, project-dict). Two outputs, one _load_project() pass, so the deck
-    can never drift from the report."""
+    """Write the THREE views of one project from a single load — the interactive report
+    research/viz/<name>.html, the offline slide deck <name>.slides.html, and the phone GLANCE
+    <name>.mobile.png (the one the close SendUserFile's so it lands in your hand) — and return
+    (htmlpath, slidespath, mobilepath, project-dict). One _load_project() pass, so none can drift."""
     d = _load_project(name)
     outdir = ROOT / "viz"
     outdir.mkdir(exist_ok=True)
@@ -1331,7 +1475,15 @@ def generate(name):
                                         glossary=d["glossary"], clarify=d["clarify"],
                                         motivation=d["motivation"]),
                           encoding="utf-8")
-    return htmlpath, slidespath, d
+    # the phone preview — a path is useless on a phone, so render an inline-previewable card too.
+    # Folded from the same substrate (mobile.py reuses plan.* / split_goal); fail-open so a broken
+    # Pillow/font env never breaks the report — generate() still returns the html/slides.
+    try:
+        import mobile
+        mobilepath = mobile.build(name, outdir=outdir)
+    except Exception:
+        mobilepath = None
+    return htmlpath, slidespath, mobilepath, d
 
 
 def absorb(name, blob_path):
@@ -1385,7 +1537,7 @@ def absorb(name, blob_path):
     except Exception:
         pass
 
-    htmlpath, _slides, _ = generate(name)
+    htmlpath, _slides, _mobile, _ = generate(name)
     print(f"absorbed {added} glossary term(s) + {cadded} FAQ entr(y/ies) + {madded} mastered "
           f"decision(s) into {gpath.name} + {cpath.name} + plan-progress\nregenerated HTML: {htmlpath}")
 
@@ -1408,9 +1560,14 @@ def main():
     if blob:
         absorb(name, blob)
         return
-    htmlpath, slidespath, d = generate(name)
+    htmlpath, slidespath, mobilepath, d = generate(name)
     print(stdout_summary(name, d["goal"], d["bar"], d["pl"], d["nodes"], d["know"], htmlpath))
-    print(f"slides: {slidespath}  (open in a browser · ←/→ to page · Print → Save-as-PDF)")
+    # The three sign-off lines every plan/execute close ends on. HTML/SLIDES are addresses;
+    # MOBILE is the artifact to SendUserFile so the picture lands in your hand (the report doorman
+    # checks all three are surfaced + the mobile preview was actually sent).
+    print(f"SLIDES: {slidespath}  (open in a browser · ←/→ to page · Print → Save-as-PDF)")
+    if mobilepath is not None:
+        print(f"MOBILE: {mobilepath}  (SendUserFile this — it previews inline on your phone)")
 
 
 if __name__ == "__main__":

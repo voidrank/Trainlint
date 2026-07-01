@@ -82,6 +82,45 @@ def _last_assistant_text(transcript_path):
         return ""
 
 
+def _sent_mobile(transcript_path, tail_lines=90):
+    """True if the close ACTUALLY delivered the phone preview — a `SendUserFile` tool call whose
+    input references the mobile artifact ('mobile' / a .png). This is the 'reaches your hand' half
+    of the delivery gate: a `MOBILE: <path>` line in the prose is only a path; this confirms the
+    file was sent. Bounded to the transcript TAIL (the send + report are adjacent in the close
+    turn) so a mobile-send from a much earlier turn can't false-satisfy. Conservative + fail-open:
+    any parse error -> treat as not-confirmed for the line scanned, never raises."""
+    try:
+        p = Path(transcript_path)
+        if not p.exists():
+            return False
+        lines = p.read_text(encoding="utf-8").splitlines()
+        for line in lines[-tail_lines:]:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            msg = obj.get("message", obj)
+            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                continue
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            for b in content:
+                if not isinstance(b, dict) or b.get("type") != "tool_use":
+                    continue
+                if b.get("name") != "SendUserFile":
+                    continue
+                blob = json.dumps(b.get("input", {}), ensure_ascii=False).lower()
+                if "mobile" in blob or ".png" in blob:
+                    return True
+        return False
+    except Exception:
+        return False
+
+
 def _leads_a_line(token, text):
     """True if `token` opens any line — i.e. it is used as a bare codename/subject
     rather than a trailing tag. Strips markdown bullet/heading/bold/backtick markers
@@ -112,6 +151,167 @@ def _cited(ids, text):
     return out
 
 
+# --- DATA-FORMAT gate -------------------------------------------------------------
+# When a message DESCRIBES a data format, it must SHOW 3-4 concrete examples — an
+# abstract field/grammar description with no real samples is the exact thing that reads
+# as "看不懂". Universal (not gated on plan-id citations): any substantial final message
+# that explains a format and under-illustrates it bounces once for examples.
+_DATA_FORMAT_MIN_CHARS = 300
+_MIN_FORMAT_EXAMPLES = 3
+
+
+def _format_details(text):
+    """Distinct STRUCTURAL signals that the text is describing a data format. >=2 => it is
+    explaining a format (one passing mention of e.g. 'grammar' is not enough)."""
+    d = set()
+    if re.search(r"<\|speaker:|speaker\s+(?:tag|marker|turn|id)", text, re.I):
+        d.add("speaker")
+    if re.search(r"\[tag\]|\[\.\.\.\]|bracket\s+tag|inline\s+tag|\[laugh|\[music", text, re.I):
+        d.add("tag")
+    if re.search(r"\bjsonl?\b|\.jsonl\b", text, re.I):
+        d.add("jsonl")
+    if re.search(r"\bschema\b", text, re.I):
+        d.add("schema")
+    if re.search(r'"?\w+"?\s+field|\bfields?\b\s*[:：]|required\s+\w+\s+field|\bmax_length\b', text, re.I):
+        d.add("field")
+    if re.search(r"training\s+pairs?|input\s*[-=/→>]+\s*output|\(\s*input\s*,?\s*output\s*\)", text, re.I):
+        d.add("pair")
+    if re.search(r"\bgrammar\b", text, re.I):
+        d.add("grammar")
+    return d
+
+
+def _count_examples(text):
+    """How many concrete example UNITS the text shows. A fenced ``` block counts as the number
+    of record-ish lines inside it (>=1 per block); a record-ish line outside a fence (a
+    `<|speaker:...|>` sample, a JSON object, a `"key": ...` row) counts as one."""
+    rec = re.compile(r"<\|speaker:|^\s*\{.*\".+\"\s*:|^\s*\"[^\"]+\"\s*:")
+    n, in_fence, cur = 0, False, 0
+    for ln in text.split("\n"):
+        if ln.lstrip().startswith("```"):
+            if not in_fence:
+                in_fence, cur = True, 0
+            else:
+                in_fence = False
+                n += max(1, cur)
+            continue
+        is_rec = bool(rec.search(ln))
+        if in_fence:
+            if is_rec:
+                cur += 1
+        elif is_rec:
+            n += 1
+    if in_fence:                      # text ended inside an unclosed fence
+        n += max(1, cur)
+    return n
+
+
+def _data_format_fragment(text):
+    """Fragment for the miss list if the text explains a data format but shows <3 examples,
+    else None. Conservative: needs >=2 structural format signals before it fires."""
+    if len(text) < _DATA_FORMAT_MIN_CHARS:
+        return None
+    # Fire only when the message is genuinely SHOWING format structure, not a summary that
+    # name-drops "jsonl"/"speaker tags" in passing: need >=3 distinct format signals, OR >=2
+    # signals AND an actual token literal (<|speaker:..|> or a [lowercase] tag) present.
+    details = _format_details(text)
+    has_literal = bool(re.search(r"<\|speaker:|<\|\w{1,12}\|>|\[[a-z][a-z ]{1,20}\]", text))
+    if not (len(details) >= 3 or (len(details) >= 2 and has_literal)):
+        return None
+    n = _count_examples(text)
+    if n >= _MIN_FORMAT_EXAMPLES:
+        return None
+    return (f"3-4 concrete EXAMPLES of the data format — you describe the format "
+            f"(speaker/tag/jsonl structure) but show only {n} real sample(s). Paste 3-4 actual "
+            f"examples (real `<|speaker:0|> ... [laughs] ...` lines and/or real JSONL rows), not just "
+            f"a field-by-field description, so the shape is unambiguous")
+
+
+def _plan_format_gaps():
+    """The PLAN-SOURCE half: the heavy format content lives in the decisions that viz.py renders
+    into the HTML, NOT in the chat summary. Scan each decision's own text (decision+choice+why);
+    return the ids of those that DESCRIBE a data format (>=2 structural signals) but carry <3
+    concrete examples — so 'explain a format, show examples' is enforced where the content actually
+    is, not only in the chat reply. Fail-open: any error -> no gaps."""
+    gaps = []
+    try:
+        for d in planlib.load():
+            # Focus on the decision(s) that DEFINE the data format (the 'format' phase / id), not
+            # every decision that merely references speaker/tag tokens in passing.
+            if d.get("phase") != "format" and "format" not in str(d.get("id", "")):
+                continue
+            # Newline-join so each example/field is its own line (the example counter is per-line);
+            # expand list fields (e.g. `examples`) element-by-element.
+            parts = []
+            for k in ("decision", "choice", "why", "note", "notes", "examples"):
+                v = d.get(k)
+                if isinstance(v, (list, tuple)):
+                    parts.extend(str(x) for x in v)
+                elif v:
+                    parts.append(str(v))
+            blob = "\n".join(parts)
+            if len(_format_details(blob)) >= 2 and _count_examples(blob) < _MIN_FORMAT_EXAMPLES:
+                did = d.get("id")
+                if did:
+                    gaps.append(did)
+    except Exception:
+        return []
+    return gaps
+
+
+def _pillar_level_gaps():
+    """Pillars are the project's CORE — they must be high-level strategy, not implementation
+    detail. Return the ids of any `pillar` decision tagged `level: impl`, so a code-level contract
+    can't masquerade as a core dimension. Fail-open."""
+    gaps = []
+    try:
+        for d in planlib.load():
+            if d.get("pillar") and str(d.get("level", "high")).lower() == "impl":
+                did = d.get("id")
+                if did:
+                    gaps.append(did)
+    except Exception:
+        return []
+    return gaps
+
+
+_GOAL_HEADLINE_MAX_WORDS = 25
+
+
+def _goal_too_long():
+    """The goal's first sentence is the report's WHAT-WE-WANT headline. Keep it ONE short, clear
+    sentence — the pillars carry the detail as bullets. Return the headline word count if it blows
+    past the cap, else 0. Fail-open."""
+    try:
+        active = (RESEARCH.parent / ".active-project").read_text(encoding="utf-8").strip()
+        p = RESEARCH / f"goal.{active}.txt"
+        if not p.exists():
+            return 0
+        g = " ".join(p.read_text(encoding="utf-8").split())
+        # headline = up to the first sentence end or the DONE clause, whichever comes first
+        head = re.split(r"(?<=[.])\s+|\bDONE\b", g, maxsplit=1, flags=re.I)[0]
+        n = len(head.split())
+        return n if n > _GOAL_HEADLINE_MAX_WORDS else 0
+    except Exception:
+        return 0
+
+
+def _plan_plain_gaps():
+    """Every decision must carry a one-sentence PLAIN-language summary (`plain` field) — that's
+    what the report leads each decision with, so a teammate gets the meaning before the dense
+    rationale. Return the ids of decisions missing a non-empty `plain`. Fail-open."""
+    gaps = []
+    try:
+        for d in planlib.load():
+            if not str(d.get("plain", "")).strip():
+                did = d.get("id")
+                if did:
+                    gaps.append(did)
+    except Exception:
+        return []
+    return gaps
+
+
 def check(data):
     """Stop-event report gate. Returns [] for every non-report case."""
     if data.get("hook_event_name") not in ("Stop", "SubagentStop"):
@@ -122,14 +322,51 @@ def check(data):
         return []
     try:
         text = _last_assistant_text(data.get("transcript_path", ""))
+
+        # DATA-FORMAT gate — runs on ANY substantial final message (a format explanation need
+        # not cite plan ids). If it fires and the message is NOT a plan report, bounce on it alone.
+        df_fragment = _data_format_fragment(text)
+
+        def _df_only():
+            if not df_fragment:
+                return []
+            return [{"name": "data-format-examples", "level": "reject", "certain": True,
+                     "message": "📐 DATA-FORMAT gate — " + df_fragment
+                                + ". (This bounces once; the rewrite goes straight through.)"}]
+
         if len(text) < _MIN_REPORT_CHARS:
-            return []
+            return _df_only()
         ids = [d.get("id", "") for d in planlib.load()]
         cited = _cited(ids, text)
         if len(cited) < _MIN_CITED_IDS:
-            return []  # not report-shaped: a normal answer, not a plan walk
+            return _df_only()  # not report-shaped: a normal answer, not a plan walk
 
         misses = []
+        if df_fragment:
+            misses.append(df_fragment)
+        gaps = _plan_format_gaps()
+        if gaps:
+            misses.append("these PLAN decisions describe a data format but show <3 examples: "
+                          + ", ".join("`%s`" % g for g in gaps)
+                          + " — add 3-4 real samples to each one's choice/notes (they're the heavy "
+                          "content viz.py renders into the HTML, where the lint couldn't reach before)")
+        pillar_lvl = _pillar_level_gaps()
+        if pillar_lvl:
+            misses.append("these decisions are PILLARS but tagged `level: impl`: "
+                          + ", ".join("`%s`" % g for g in pillar_lvl)
+                          + " — a pillar must be high-level strategy; either raise it to `level: high` "
+                          "or drop its pillar status so implementation detail isn't treated as core")
+        long_head = _goal_too_long()
+        if long_head:
+            misses.append(f"the goal's headline is {long_head} words (cap {_GOAL_HEADLINE_MAX_WORDS}) — "
+                          "make the first sentence ONE short, clear line; move the detail into the "
+                          "pillars and the `DONE = …` clause so WHAT-WE-WANT reads at a glance")
+        plain_gaps = _plan_plain_gaps()
+        if plain_gaps:
+            misses.append("these PLAN decisions have no plain-language summary (`plain` field): "
+                          + ", ".join("`%s`" % g for g in plain_gaps)
+                          + " — add a one-sentence, jargon-free summary to each so the report can lead "
+                          "with the meaning before the dense rationale")
         # A. the stance line  —  "<N>/<total> decided · <k> pillars · main thread → ..."
         if not re.search(r"\d+\s*/\s*\d+[^\n]{0,40}decid", text, re.I):
             misses.append("the one-line stance — `<N>/<total> decided · <k> pillars · "
@@ -155,10 +392,30 @@ def check(data):
         # line — the one-glance picture (decision spine + per-decision chatbot/quiz) to open. That
         # too was prose-only persuasion the model drops at large context (this very gate exists
         # because that happens); bind it here so a plan walk that forgets to render the report bounces.
-        if not re.search(r"\bHTML:\s*\S+\.html\b", text, re.I) \
-                and not re.search(r"\bviz\.[\w.-]*\.html\b", text, re.I):
+        html_signed = (bool(re.search(r"\bHTML:\s*\S+\.html\b", text, re.I))
+                       or bool(re.search(r"\bviz\.[\w.-]*\.html\b", text, re.I)))
+        if not html_signed:
             misses.append("the HTML sign-off — run `python3 research/viz.py <project>` and end on its "
                           "`HTML: <path>` line so I always have the one-glance report to open")
+        # E2. the DELIVERY gate — the close must put the picture IN MY HAND, not just print a path.
+        # A `/home/.../viz/<name>.html` address is useless on a phone, so viz.py also renders a
+        # phone card (<name>.mobile.png). The close must (a) surface the `MOBILE: <path>` sign-off
+        # AND (b) actually `SendUserFile` it, so it previews inline on my phone. Required only on a
+        # rendered close (when the HTML sign-off is present) — a report that never rendered viz is
+        # already bounced by E above, so this doesn't double-fire on it.
+        if html_signed:
+            mobile_line = bool(re.search(r"\bMOBILE:\s*\S+\.(?:png|html)\b", text, re.I)) \
+                or "📱" in text
+            sent = _sent_mobile(data.get("transcript_path", ""))
+            if not (mobile_line and sent):
+                lack = []
+                if not mobile_line:
+                    lack.append("surface the `MOBILE: <path>` line viz.py prints")
+                if not sent:
+                    lack.append("actually `SendUserFile` that mobile preview so it lands on my phone")
+                misses.append("the DELIVERY gate — a path I can't open from my phone isn't 'in hand'. "
+                              + " and ".join(lack)
+                              + " (viz.py renders `<name>.mobile.png`; send it, don't just name it)")
         # F. the BUILT lens (decided≠built). The failure this whole gate exists to stop in reports:
         # a plan sitting at 8/9 "decided" with nothing produced reads as almost-done. If ANY decision
         # is decided-on-paper (a choice typed, no artifact on disk), a plan report must SAY so —

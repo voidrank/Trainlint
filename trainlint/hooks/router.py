@@ -29,6 +29,7 @@ import classifier     # noqa: E402
 import planaware      # noqa: E402
 import readtrack      # noqa: E402
 import reportcheck    # noqa: E402
+import autopilot      # noqa: E402
 
 _RANK = {"reject": 3, "escalate": 2, "coach": 1}
 
@@ -46,10 +47,17 @@ def decide(data):
     event = data.get("hook_event_name", "UserPromptSubmit")
     if event in ("Stop", "SubagentStop"):
         items = reportcheck.check(data)
-        if not items:
-            return None
-        return {"decision": "block",
-                "reason": "\n\n".join(i["message"] for i in items)}
+        if items:
+            # Report needs a rewrite first — bounce it; do NOT autopilot a malformed report.
+            return {"decision": "block",
+                    "reason": "\n\n".join(i["message"] for i in items)}
+        # Report is clean. OPT-IN autopilot: if no human/GPU/decision block is needed, keep the
+        # loop running by blocking the stop with a "run /trainlint:execute-and-report" reason.
+        # Off by default; capped + Haiku-gated; returns None (let it stop) on anything uncertain.
+        cont = autopilot.check(data)
+        if cont:
+            return {"decision": "block", "reason": cont}
+        return None
 
     # Host shims: rewrite a foreign tool call into Claude-style Edit/Write/Bash
     # tool_input so the rest of the pipeline (prefilter/checks/readtrack/planaware)
