@@ -48,6 +48,21 @@ def _reason(out):
     return (out or {}).get("reason", "")
 
 
+def _stop_event_sends(text, sends, *, name="deliv"):
+    """Report `text` as the last assistant turn, preceded by one SendUserFile tool_use turn per path
+    in `sends` — so the E2 delivery gate can see which report views actually reached the phone."""
+    p = _tmp / f"{name}.jsonl"
+    with p.open("w", encoding="utf-8") as f:
+        f.write(json.dumps({"message": {"role": "user", "content": "go"}}) + "\n")
+        for path in sends:
+            f.write(json.dumps({"message": {"role": "assistant", "content": [
+                {"type": "tool_use", "name": "SendUserFile",
+                 "input": {"path": path, "display": "render"}}]}}) + "\n")
+        f.write(json.dumps({"message": {"role": "assistant",
+                                        "content": [{"type": "text", "text": text}]}}) + "\n")
+    return {"hook_event_name": "Stop", "transcript_path": str(p), "session_id": "s"}
+
+
 # A real patois report from a session: cites plan ids, NO stance line, NO map.
 BAD = (
     "**Pinned: bootstrap from `checkpoints/stage3-ckpt`** at TP=4/EP=8.\n\n"
@@ -141,5 +156,27 @@ check(_decision(out) == "block" and "jargon" in _reason(out),
 out = router.decide({"hook_event_name": "Stop", "transcript_path": str(_tmp / "missing.jsonl")})
 check(out is None, "missing transcript -> fail-open silent (never raises)")
 
-print(f"\n{10 - fails}/10 passed")
+# 9. DELIVERY gate (which-html: ship both) — a rendered report must SendUserFile BOTH the report
+#    .html AND the slides .html to the phone. The report text below carries the HTML sign-off so E2
+#    fires; the transcript varies which files were actually sent.
+#    (the example fixture's plan lacks `plain` fields, so a *rendered* report also trips the separate
+#    plan-source check; we assert on the DELIVERY miss specifically — it appears/disappears with the
+#    sends — not on overall silence.)
+RPT, DECK = "/x/report-to-phone.html", "/x/report-to-phone.slides.html"
+DELIV = GOOD + "\n\nHTML: /x/report-to-phone.html\nSLIDES: /x/report-to-phone.slides.html"
+out = router.decide(_stop_event_sends(DELIV, [], name="d0"))
+check(_decision(out) == "block" and "DELIVERY gate" in _reason(out),
+      "rendered report, nothing sent -> DELIVERY bounce")
+out = router.decide(_stop_event_sends(DELIV, [RPT], name="d1"))
+check("DELIVERY gate" in _reason(out) and "slides deck" in _reason(out),
+      "only the report .html sent -> DELIVERY bounce names the missing slides deck")
+out = router.decide(_stop_event_sends(DELIV, [DECK], name="d2"))
+check("DELIVERY gate" in _reason(out) and "the report `<name>.html`" in _reason(out)
+      and "slides deck" not in _reason(out),
+      "only the slides .html sent -> DELIVERY bounce names the missing report")
+out = router.decide(_stop_event_sends(DELIV, [RPT, DECK], name="d3"))
+check("DELIVERY gate" not in _reason(out),
+      "both report + slides sent -> DELIVERY gate satisfied (no delivery miss)")
+
+print(f"\n{14 - fails}/14 passed")
 sys.exit(1 if fails else 0)

@@ -84,16 +84,20 @@ def _last_assistant_text(transcript_path):
 
 
 def _sent_report_html(transcript_path, tail_lines=90):
-    """True if the close ACTUALLY delivered the report to the phone — a `SendUserFile` tool call
-    whose input references a report `.html` (the Claude mobile app renders HTML inline via
-    display:'render', so the phone gets the FULL report; a path in the prose is only a path, this
-    confirms the FILE was sent). Bounded to the transcript TAIL (the send + report are adjacent in
-    the close turn) so a send from a much earlier turn can't false-satisfy. Conservative + fail-open:
-    any parse error -> treat as not-confirmed for the line scanned, never raises."""
+    """Which report views the close ACTUALLY delivered to the phone. Returns (report, slides):
+    `report` = a `SendUserFile` of the interactive report `<name>.html`; `slides` = a `SendUserFile`
+    of the `<name>.slides.html` deck. BOTH travel now (which-html: ship both) — the Claude mobile app
+    renders each HTML inline via display:'render', so the phone gets the full report AND the glanceable
+    deck; a path in the prose is only a path, this confirms the FILES were sent. Bounded to the
+    transcript TAIL (the sends + report are adjacent in the close turn) so sends from a much earlier
+    turn can't false-satisfy. Conservative + fail-open: any parse error -> not-confirmed, never raises.
+    Note `.slides.html` also contains the substring `.html`; the report leg strips `.slides.html`
+    first so a slides-only send does NOT count as the report."""
+    report = slides = False
     try:
         p = Path(transcript_path)
         if not p.exists():
-            return False
+            return (False, False)
         lines = p.read_text(encoding="utf-8").splitlines()
         for line in lines[-tail_lines:]:
             line = line.strip()
@@ -115,11 +119,13 @@ def _sent_report_html(transcript_path, tail_lines=90):
                 if b.get("name") != "SendUserFile":
                     continue
                 blob = json.dumps(b.get("input", {}), ensure_ascii=False).lower()
-                if ".html" in blob:
-                    return True
-        return False
+                if ".slides.html" in blob:
+                    slides = True
+                if ".html" in blob.replace(".slides.html", ""):
+                    report = True
+        return (report, slides)
     except Exception:
-        return False
+        return (report, slides)
 
 
 def _used_askuserquestion(transcript_path, tail_lines=60):
@@ -464,11 +470,14 @@ def check(data):
         # rendered close (when the HTML sign-off is present) — a report that never rendered viz is
         # already bounced by E above, so this doesn't double-fire on it.
         if html_signed:
-            sent = _sent_report_html(data.get("transcript_path", ""))
-            if not sent:
-                misses.append("the DELIVERY gate — a path I can't open from my phone isn't delivered. "
-                              "`SendUserFile` the report `.html` with display:'render' so the full "
-                              "report renders inline on my phone (don't just name the path)")
+            report_sent, slides_sent = _sent_report_html(data.get("transcript_path", ""))
+            if not (report_sent and slides_sent):
+                missing = ([] if report_sent else ["the report `<name>.html`"]) + \
+                          ([] if slides_sent else ["the slides deck `<name>.slides.html`"])
+                misses.append("the DELIVERY gate — a path I can't open from my phone isn't delivered, "
+                              "and BOTH views travel now. `SendUserFile` " + " and ".join(missing) +
+                              " with display:'render' so each renders inline on my phone (don't just "
+                              "name the path)")
         # F. the BUILT lens (decided≠built). The failure this whole gate exists to stop in reports:
         # a plan sitting at 8/9 "decided" with nothing produced reads as almost-done. If ANY decision
         # is decided-on-paper (a choice typed, no artifact on disk), a plan report must SAY so —

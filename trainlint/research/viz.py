@@ -1651,11 +1651,14 @@ def main():
         return
     htmlpath, slidespath, d = generate(name)
     print(stdout_summary(name, d["goal"], d["bar"], d["pl"], d["nodes"], d["know"], htmlpath))
-    # The sign-off every plan/execute close ends on. HTML is BOTH the laptop address AND the phone
-    # deliverable: the close SendUserFile's the HTML with display:'render' and the Claude mobile app
-    # renders it inline (the report doorman checks the HTML was actually sent). SLIDES is the deck.
+    # The sign-off every plan/execute close ends on. BOTH the report HTML and the slides deck are
+    # phone deliverables (which-html: ship both): the close SendUserFile's EACH with display:'render'
+    # and the Claude mobile app renders them inline — the report is full detail + the per-decision
+    # chatbots, the deck is the glanceable paged view. The report doorman checks BOTH were sent.
     print(f"SLIDES: {slidespath}  (open in a browser · ←/→ to page · Print → Save-as-PDF)")
-    print(f"PHONE: SendUserFile {htmlpath} with display:'render' — the app renders the report inline")
+    print(f"PHONE: SendUserFile BOTH with display:'render' — the app renders each inline:")
+    print(f"PHONE:   {htmlpath}   (the interactive report — full detail + chatbots)")
+    print(f"PHONE:   {slidespath}   (the slides deck — glanceable, paged)")
     try:  # silent loopback server (started in generate) — surface the browser URL where the
         import serve  # JS-heavy report (per-block chatbots, quizzes) actually works
         _u = serve.url()  # check-only, never spawns a 2nd server (generate() is the spawn point)

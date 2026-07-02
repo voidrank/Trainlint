@@ -7,7 +7,7 @@ ACTS and then SHOWS. It reads the plan, drives the single decision that gates th
 folds the result back in. The always-on doorman (hooks) watches the work as you run it; this
 command is what aims the work and what closes the loop afterward.
 
-Active project = resolved PER SESSION from context (env $HARNESS_PROJECT / this session's lock / cwd's project home). Plan lives at
+Active project = `${CLAUDE_PLUGIN_ROOT}/.active-project`. Plan lives at
 `${CLAUDE_PLUGIN_ROOT}/research/plan.<active-project>.jsonl`. If there is **no plan yet**, stop and
 tell me to run `/trainlint:plan` first — there is nothing to drive without decisions. If every
 decision is already `verified`, skip the driving and go straight to the report.
@@ -98,13 +98,14 @@ This half is the old `viz`/`lint` surface, unchanged in capability. Run both:
   story · dated timeline · phase-ordered decision spine beside the search tree · knowledge-readiness
   edges). It writes two views and prints the sign-off lines: `HTML: <path>` (the interactive report),
   `SLIDES: <path>` (the offline deck), and `PHONE:` (how to deliver it). Show me the compact ASCII
-  summary it prints, **surface the `HTML:`/`SLIDES:` lines verbatim**, and **`SendUserFile` the report
-  `HTML` file with `display:'render'`** — the Claude mobile app RENDERS an HTML file sent that way
-  inline, so I get the FULL interactive report on my phone (not a path, not a glance image). The HTML
+  summary it prints, **surface the `HTML:`/`SLIDES:` lines verbatim**, and **`SendUserFile` BOTH the
+  report `<name>.html` AND the slides deck `<name>.slides.html`, each with `display:'render'`** — the
+  Claude mobile app RENDERS an HTML file sent that way inline, so I get the FULL interactive report AND
+  the glanceable paged deck on my phone (not a path, not a glance image). The HTML
   opens in any browser too; each decision in the spine carries an expandable "💬 Ask about this"
   chatbot (browser-side Anthropic API, key stored only in the browser). The `Stop` report-doorman
-  enforces this delivery: a close that renders the report but never `SendUserFile`s the `.html`
-  bounces ONCE for a rewrite.
+  enforces this delivery: a close that renders the report but fails to `SendUserFile` BOTH `.html`
+  files bounces ONCE for a rewrite.
 
 Wrap the output in the **explain-like-a-person voice** (same five rules `/trainlint:plan` closes
 with — and the `Stop` report-doorman enforces them here too):

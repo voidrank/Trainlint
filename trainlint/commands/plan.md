@@ -4,12 +4,11 @@ argument-hint: "[review | status | from-log [session-id|path] | <free-text conte
 ---
 The PLAN is the project's floor plan: an ordered list of DECISIONS (one JSONL line each in
 `${CLAUDE_PLUGIN_ROOT}/research/plan.<active-project>.jsonl`), every one tagged with the
-transferable PRINCIPLE that governs it. Active project = resolved PER SESSION from context (env
-$HARNESS_PROJECT, else this session's lock, else the project whose home contains your cwd).
+transferable PRINCIPLE that governs it. Active project = `${CLAUDE_PLUGIN_ROOT}/.active-project`.
 
 ## Scaffold first if the project isn't registered yet
 `/trainlint:plan` is the single entry point — it registers a new project AND plans it. Before
-anything else, check the active project (env $HARNESS_PROJECT / this session's lock / cwd's project home) and whether
+anything else, check `${CLAUDE_PLUGIN_ROOT}/.active-project` and whether
 `project.<name>.json` / `research/facts.<name>.json` exist for it. If the project the operator
 named isn't registered yet (or `$ARGUMENTS` is a fresh project name with no substrate), run the
 thin registrar first — `python3 "${CLAUDE_PLUGIN_ROOT}/research/new_project.py" <name>` — which
@@ -74,7 +73,7 @@ Present this full picture to me FIRST and let me correct it.
 
 ## Draft / update the plan (foreground)
 
-1. Read the active project (resolved per session), then `research/goal.<name>.txt`,
+1. Read `${CLAUDE_PLUGIN_ROOT}/.active-project`, then `research/goal.<name>.txt`,
    `project.<name>.json`, `research/facts.<name>.json`, and the ACTUAL code/configs they point to.
    If `$ARGUMENTS` is free text (e.g. "focus on the turn-based audio discussion"), let it steer you.
 2. Do the COMPLETE-CONTEXT exposition above. Show me, let me correct it. Then distill the project's
@@ -197,19 +196,20 @@ Present this full picture to me FIRST and let me correct it.
       laptop. Before any experiment this is not an empty tool: `viz.py` detects the planning stage and
       renders the plan story (motivation · goal · main thread · next) over a full-width decision spine,
       suppressing the empty timeline/tree.
-   2. **`SendUserFile` the report `HTML` file with `display:'render'`** — the Claude mobile app RENDERS
-      an HTML file sent that way inline, so I get the FULL interactive report on my phone (not a path
-      I can't open, not a glance image). This is the "on my phone" step; don't just name the path,
-      SEND the `.html`.
+   2. **`SendUserFile` BOTH the report `<name>.html` AND the slides deck `<name>.slides.html`, each
+      with `display:'render'`** — the Claude mobile app RENDERS an HTML file sent that way inline, so I
+      get the FULL interactive report (detail + per-decision chatbots) AND the glanceable paged deck on
+      my phone (not a path I can't open, not a glance image). This is the "on my phone" step; don't just
+      name the paths, SEND both `.html` files.
 
    **This is enforced, not just asked.** A finished report is prose, not a tool action, so it used to
    reach no hook — the voice rules were persuasion the model drops at large context. The `Stop` hook
    (`hooks/reportcheck.py`) now reads the emitted report: if it walks the plan but skips the stance
    line or the map, leads with bare decision-ids, leans on undefined jargon (`cu_seqlens`, `TP=4`),
-   **omits the `HTML: <path>` sign-off** (the report wasn't rendered), or **never `SendUserFile`s the
-   report `.html`** (it never reached my phone), it bounces ONCE for a rewrite. So the layout above —
-   render `viz.py`, surface the lines, send the report `.html` — is a contract the doorman checks,
-   not a suggestion.
+   **omits the `HTML: <path>` sign-off** (the report wasn't rendered), or **fails to `SendUserFile`
+   BOTH the report `.html` and the slides `.html`** (they never reached my phone), it bounces ONCE for
+   a rewrite. So the layout above — render `viz.py`, surface the lines, send both `.html` files — is a
+   contract the doorman checks, not a suggestion.
 
 If the plan ends up only partly written (we ran out of room, got pulled away), that's fine — the
 SessionStart briefing flags a registered-but-unwritten plan, the understanding-gate flags the
