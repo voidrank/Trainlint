@@ -1,7 +1,7 @@
 {
   "name": "trainlint",
   "description": "Soft guardrail harness for AI/ML training. A doorman between you and the coding agent: silent / coach / escalate / reject. Never locks the session.",
-  "version": "0.3.41",
+  "version": "0.3.42",
   "keywords": [
     "hooks",
     "training",

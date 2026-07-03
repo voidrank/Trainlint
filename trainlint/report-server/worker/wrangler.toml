@@ -1,0 +1,27 @@
+# Cloudflare Worker: the multi-tenant trainlint report service.
+# Deploy:  wrangler deploy   (after the setup steps in ../README.md)
+
+name = "trainlint-report-server"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# R2 bucket that stores every tenant's reports, keyed <namespace>/<project>.html
+# Create it once:  wrangler r2 bucket create trainlint-reports
+[[r2_buckets]]
+binding = "REPORTS"
+bucket_name = "trainlint-reports"
+
+# Bind the apex domain straight to the Worker (DNS is already on Cloudflare).
+[[routes]]
+pattern = "secondfoundationlabs.com"
+custom_domain = true
+
+# Public config. Fill these from your Cloudflare Access application (Zero Trust dashboard):
+#   ACCESS_AUD          = the Access application's Audience (AUD) tag
+#   ACCESS_TEAM_DOMAIN  = <your-team>.cloudflareaccess.com
+[vars]
+ACCESS_AUD = "REPLACE_WITH_ACCESS_APP_AUD_TAG"
+ACCESS_TEAM_DOMAIN = "REPLACE_WITH_TEAM.cloudflareaccess.com"
+
+# SECRET (never commit): the HMAC key that signs upload tokens.
+#   openssl rand -hex 32 | wrangler secret put TOKEN_SIGNING_KEY

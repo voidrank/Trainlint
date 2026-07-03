@@ -1553,8 +1553,12 @@ def generate(name):
     The report HTML is itself the phone deliverable: the close SendUserFile's it with
     display:'render' and the Claude mobile app renders it inline (no PNG card needed)."""
     d = _load_project(name)
-    outdir = ROOT / "viz"
-    outdir.mkdir(exist_ok=True)
+    # STABLE render target (stable-render-dir): all sessions/versions render into ONE dir under
+    # data_root (survives plugin version bumps), not the versioned ROOT/viz — so a single durable
+    # server serves every project and a bump can't strand it (the 8420->stale-dir bug). Same reason
+    # per-project data already lives in data_root (paths.py).
+    outdir = paths.data_root() / "viz"
+    outdir.mkdir(parents=True, exist_ok=True)
     try:  # silently keep a loopback server up so the JS-heavy report (chatbots) is browsable
         import serve
         serve.ensure(outdir)
