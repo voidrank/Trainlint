@@ -53,20 +53,59 @@ export async function mintToken(email, env) {
 }
 
 // Returns { ns, email } for a valid token, else null. Constant-ish time: we let crypto.subtle.verify
-// do the comparison rather than string-comparing signatures ourselves.
+// do the comparison rather than string-comparing signatures ourselves. Supports both signed JWT-like tokens,
+// paired hex tokens stored in R2, and raw random hex tokens.
 export async function verifyToken(token, env) {
-  try {
-    const [payload, sig] = String(token).split(".");
-    if (!payload || !sig) return null;
-    const key = await hmacKey(env.TOKEN_SIGNING_KEY);
-    const ok = await crypto.subtle.verify("HMAC", key, b64urlToBytes(sig), enc.encode(payload));
-    if (!ok) return null;
-    const body = JSON.parse(new TextDecoder().decode(b64urlToBytes(payload)));
-    if (!body.ns || !body.email) return null;
-    return { ns: body.ns, email: body.email };
-  } catch {
-    return null;
+  if (!token) return null;
+  const strToken = String(token).trim();
+
+  // 1. Signed HMAC token (payload.signature)
+  if (strToken.includes(".")) {
+    try {
+      const [payload, sig] = strToken.split(".");
+      if (!payload || !sig) return null;
+      const key = await hmacKey(env.TOKEN_SIGNING_KEY);
+      const ok = await crypto.subtle.verify("HMAC", key, b64urlToBytes(sig), enc.encode(payload));
+      if (!ok) return null;
+      const body = JSON.parse(new TextDecoder().decode(b64urlToBytes(payload)));
+      if (!body.ns || !body.email) return null;
+      return { ns: body.ns, email: body.email };
+    } catch {
+      return null;
+    }
   }
+
+  // 2. Raw random hex client token (32-character hex)
+  if (/^[a-f0-9]{32}$/i.test(strToken)) {
+    try {
+      // Check if paired in R2 first
+      if (env.REPORTS) {
+        const pairingObj = await env.REPORTS.get(`_tokens/${strToken}`);
+        if (pairingObj) {
+          const pairing = await pairingObj.json();
+          if (pairing && pairing.email) {
+            const ns = await nsForEmail(pairing.email);
+            return { ns, email: pairing.email, isPaired: true };
+          }
+        }
+      }
+      
+      const digest = await crypto.subtle.digest("SHA-256", enc.encode(strToken));
+      const ns = bytesToHex(digest).slice(0, 32);
+      return { ns, email: `anonymous-${ns.slice(0, 8)}@trainlint.local`, isRaw: true };
+    } catch {
+      // Fallback if R2 call fails or other issue
+      try {
+        const digest = await crypto.subtle.digest("SHA-256", enc.encode(strToken));
+        const ns = bytesToHex(digest).slice(0, 32);
+        return { ns, email: `anonymous-${ns.slice(0, 8)}@trainlint.local`, isRaw: true };
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  return null;
 }
 
 // ---- Cloudflare Access JWT verification (RS256 against the team's JWKS) ----------------------------

@@ -1576,6 +1576,11 @@ def generate(name):
                                         glossary=d["glossary"], clarify=d["clarify"],
                                         motivation=d["motivation"]),
                           encoding="utf-8")
+    try:
+        import push
+        push.push_report(name, htmlpath, slidespath)
+    except Exception:
+        pass
     return htmlpath, slidespath, d
 
 

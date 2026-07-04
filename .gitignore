@@ -8,3 +8,10 @@ project.demo.json
 # generated visualizations + project-flow state markers
 trainlint/research/viz/
 trainlint/research/.state/
+.wrangler/
+.token
+.state/
+sessions/
+wrangler.log
+*.log
+
