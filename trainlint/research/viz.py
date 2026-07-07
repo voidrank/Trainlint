@@ -105,6 +105,9 @@ def split_goal(text):
     if m:
         text = text[:m.start()].strip()
     i = text.lower().find("bar for")
+    if i == -1:  # goals also phrase the criterion as 'DONE = …' — split there too
+        m = re.search(r"\bDONE\s*=", text)
+        i = m.start() if m else -1
     if i == -1:
         return text, ""
     return text[:i].rstrip(" ;.—-").strip(), text[i:].strip()
@@ -147,6 +150,34 @@ def newly_done(name):
         return {d for t, d in ev if t == latest}, latest
     except Exception:
         return set(), ""
+
+
+def newly_done_notes(name):
+    """(list of (kind, plain-note) on the LATEST log date, that date) — powers the human-readable
+    'Newly done' line so a reader sees WHAT changed in plain words, not raw kebab decision-ids."""
+    try:
+        lp = paths.resolve(f"log.{name}.jsonl")
+        if not lp.exists():
+            return [], ""
+        ev = []
+        for line in lp.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            ts = e.get("ts") or e.get("date")
+            note = e.get("note") or ""
+            if ts and note and e.get("kind") in ("build", "verify", "decide", "probe"):
+                ev.append((ts, e.get("kind"), note))
+        if not ev:
+            return [], ""
+        latest = max(t for t, _, _ in ev)
+        return [(k, n) for t, k, n in ev if t == latest], latest
+    except Exception:
+        return [], ""
 
 
 def timeline_rows(events, knowledge):
@@ -347,13 +378,45 @@ def tree_svg(nodes, knowledge, kinds, id2phase, phase_order):
 
 CSS = """
 :root{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--bg:#f1f5f9}
+html{scroll-padding-top:58px}  /* anchor jumps must land below the sticky .rnav bar */
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,sans-serif;line-height:1.45}
 .wrap{max-width:1120px;margin:0 auto;padding:22px}
+/* --- section nav: the report body is TABBED — a sticky bar switches which section is on screen,
+   so a reader lands on one view at a time instead of one endless scroll. Print shows everything. --- */
+.rnav{position:sticky;top:0;z-index:60;display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;
+  background:rgba(241,245,249,.93);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  padding:10px 2px 9px;margin:14px -2px 4px;border-bottom:1px solid var(--line)}
+.rnav::-webkit-scrollbar{display:none}
+.rnav button{flex:0 0 auto;border:1px solid var(--line);background:#fff;color:#334155;border-radius:20px;
+  padding:5px 13px;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .15s}
+.rnav button:hover{background:#eef2f7}
+.rnav button.on{background:#0f172a;color:#fff;border-color:#0f172a}
+.rsec{display:none}
+.rsec.on{display:block;animation:rsec-in .18s ease}
+@keyframes rsec-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media print{.rnav{display:none}.rsec{display:block}}
 .hdr{background:linear-gradient(135deg,#0f172a,#1e293b);color:#e2e8f0;border-radius:16px;padding:22px 26px}
 .hdr h1{margin:0 0 2px;font-size:22px}
 .hdr .sub{color:#94a3b8;font-size:13px;margin-bottom:14px}
+.hdr .tldr{background:rgba(148,163,184,.12);border-left:3px solid #7dd3fc;border-radius:8px;padding:12px 15px;margin:0 0 15px;font-size:14px;line-height:1.55;color:#e2e8f0}
+.hdr .tldr .tldr-tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;color:#7dd3fc;margin-right:8px;vertical-align:1px}
+.hdr .lead{font-size:15px;line-height:1.5;color:#e2e8f0;margin:0 0 15px}
+.hdr .llm{font-size:14px;line-height:1.55;color:#e2e8f0}
+.hdr .llm h4{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#7dd3fc;margin:14px 0 6px}
+.hdr .llm ul{margin:4px 0;padding-left:20px;display:flex;flex-direction:column;gap:5px}
+.hdr .llm p{margin:6px 0}
+.hdr .tldr-list{margin:7px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:5px}
+.hdr .tldr-list li{font-size:14px;line-height:1.5;color:#e2e8f0}
+.hdr .funnel{margin:2px 0 16px}
+.hdr .funnel-title{font-size:11px;font-weight:700;letter-spacing:.05em;color:#7dd3fc;margin:0 0 9px;text-transform:uppercase}
+.hdr .rung{display:flex;gap:11px;align-items:baseline;padding:5px 0 5px 12px;border-left:2px solid #334155}
+.hdr .rung-l{font-size:10px;font-weight:700;letter-spacing:.04em;color:#94a3b8;text-transform:uppercase;min-width:104px;flex-shrink:0}
+.hdr .rung-t{font-size:13.5px;color:#e2e8f0;line-height:1.45}
+.hdr .rung-now{border-left-color:#c4b5fd;background:rgba(196,181,253,.10);border-radius:0 8px 8px 0}
+.hdr .rung-now .rung-l{color:#c4b5fd}
+.hdr .rung-now .rung-t{font-weight:700;color:#fff}
 .kv{display:flex;gap:10px;margin:7px 0;font-size:14px}
 .kv .k{flex:0 0 56px;color:#7dd3fc;font-weight:700;font-size:12px;letter-spacing:.04em;padding-top:1px}
 .now{background:#0b1220;border:1px solid #334155;border-radius:10px;padding:10px 13px;margin-top:6px}
@@ -433,6 +496,22 @@ details.dec>summary::-webkit-details-marker{display:none}
 .excap{font-size:11px;color:#64748b;margin-bottom:4px}
 .excode{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#0f172a;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:8px 11px;margin:0;white-space:pre;overflow-x:auto;line-height:1.55}
 .dchfull{font-size:12px;color:#475569;padding:6px 0 2px 10px;margin-top:4px;white-space:pre-wrap;border-left:2px solid #e2e8f0}
+.surprises{margin:16px 0 4px}
+.surp-title{font-size:14px;font-weight:800;color:#0f172a;margin:0 0 9px}
+.surp{border-left:4px solid #94a3b8;background:#f8fafc;border-radius:0 9px 9px 0;padding:9px 13px;margin:0 0 8px}
+.surp-h{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.surp-badge{font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#475569;background:#e2e8f0;border-radius:20px;padding:1px 9px}
+.surp-dir{font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace}
+.surp-head{font-size:14px;font-weight:700;color:#0f172a;line-height:1.4}
+.surp-d{font-size:12.5px;color:#475569;line-height:1.5;margin-top:2px}
+.surp-hidden-bottleneck,.surp-metric-green-output-bad{border-left-color:#dc2626;background:#fef2f2}
+.surp-hidden-bottleneck .surp-badge,.surp-metric-green-output-bad .surp-badge{background:#fee2e2;color:#b91c1c}
+.surp-hard-turned-free{border-left-color:#16a34a;background:#f0fdf4}
+.surp-hard-turned-free .surp-badge{background:#dcfce7;color:#15803d}
+.surp-assumed-bottleneck-not{border-left-color:#2563eb;background:#eff6ff}
+.surp-assumed-bottleneck-not .surp-badge{background:#dbeafe;color:#1d4ed8}
+.surp-easy-turned-hard{border-left-color:#d97706;background:#fffbeb}
+.surp-doubt{border-left-color:#7c3aed;background:#faf5ff}
 .newbar{margin:14px 0 2px;padding:9px 13px;border-radius:9px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:12.5px;color:#166534}
 .newbar code{background:#dcfce7;color:#14532d;border-radius:4px;padding:1px 5px;font-size:11.5px}
 .new-tag{background:#16a34a;color:#fff;font-size:9.5px;font-weight:700;letter-spacing:.03em;padding:1px 6px;border-radius:9px;margin-left:7px;vertical-align:middle}
@@ -477,10 +556,11 @@ abbr.gl-term{text-decoration:underline dotted #94a3b8;text-underline-offset:2px;
 # — which `viz --absorb <blob.json>` later folds back into glossary.* + clarify.* on disk.
 CHAT_CSS = """
 .tl-chat{margin:6px 0 10px 24px;font-size:13px}
-.tl-ask{cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:8px;padding:3px 10px;font-size:12px;font-weight:600}
+.tl-ask{cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:8px;padding:3px 10px;font-size:12px;font-weight:600;transition:background .15s,transform .1s}
 .tl-ask:hover{background:#e0e7ff}
-.tl-panel{display:none;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:#fafbff;overflow:hidden}
-.tl-panel.open{display:block}
+.tl-ask:active{transform:scale(.96)}
+.tl-panel{margin-top:0;border:1px solid var(--line);border-radius:10px;background:#fafbff;overflow:hidden;max-height:0;opacity:0;border-width:0;transition:max-height .28s cubic-bezier(.4,0,.2,1),opacity .2s,margin-top .2s,border-width .2s}
+.tl-panel.open{max-height:520px;opacity:1;margin-top:8px;border-width:1px}
 .tl-saved{padding:8px 10px;border-bottom:1px solid #eef2f7}
 .tl-saved h5{margin:0 0 4px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#94a3b8}
 .tl-term{font-size:12.5px;margin:3px 0}.tl-term b{color:#3730a3}
@@ -488,8 +568,18 @@ CHAT_CSS = """
 .tl-faq{font-size:12.5px;margin:5px 0;color:#334155}
 .tl-faq .q{font-weight:700;color:#0f172a}
 .tl-log{padding:8px 10px;min-height:54px;max-height:340px;overflow-y:auto;resize:vertical}
-.tl-msg{margin:6px 0;font-size:13px;line-height:1.45;white-space:pre-wrap}
+.tl-msg{margin:6px 0;font-size:13px;line-height:1.45;white-space:pre-wrap;animation:tl-fade .2s ease}
 .tl-msg.u b{color:#3730a3}.tl-msg.a b{color:#16a34a}.tl-msg.err{color:#b91c1c}
+@keyframes tl-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.tl-typing{display:inline-flex;gap:5px;vertical-align:middle;padding:2px 0}
+.tl-typing i{width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block;animation:tl-bounce 1.2s infinite cubic-bezier(.4,0,.2,1)}
+.tl-typing i:nth-child(2){animation-delay:.16s}
+.tl-typing i:nth-child(3){animation-delay:.32s}
+@keyframes tl-bounce{0%,70%,100%{transform:translateY(0) scale(.6);opacity:.3}35%{transform:translateY(-5px) scale(1);opacity:1}}
+.tl-skel{margin-top:5px;display:flex;flex-direction:column;gap:6px}
+.tl-skel span{height:9px;border-radius:6px;background:linear-gradient(90deg,#e8edf5 8%,#f4f7fb 20%,#e8edf5 33%);background-size:800px 100%;animation:tl-shim 1.3s linear infinite}
+.tl-skel span:nth-child(1){width:92%}.tl-skel span:nth-child(2){width:78%}.tl-skel span:nth-child(3){width:55%}
+@keyframes tl-shim{0%{background-position:-380px 0}100%{background-position:380px 0}}
 .tl-in{display:flex;gap:6px;padding:8px 10px;border-top:1px solid #eef2f7}
 .tl-in textarea{flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px;font:inherit;font-size:13px;resize:vertical;min-height:36px}
 .tl-in button{border:0;background:#4f46e5;color:#fff;border-radius:8px;padding:0 14px;font-weight:600;cursor:pointer}
@@ -506,8 +596,10 @@ CHAT_JS = r"""
   var el=document.getElementById('tl-data'); if(!el) return;
   var DATA=JSON.parse(el.textContent);
   var LS='trainlint_mem_'+DATA.project, KK='trainlint_anthropic_key', MK='trainlint_model';
-  function mem(){try{return JSON.parse(localStorage.getItem(LS))||{faq:{},glossary:[]}}catch(e){return{faq:{},glossary:[]}}}
-  function setMem(m){localStorage.setItem(LS,JSON.stringify(m))}
+  function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
+  function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  function mem(){try{return JSON.parse(lsGet(LS))||{faq:{},glossary:[]}}catch(e){return{faq:{},glossary:[]}}}
+  function setMem(m){lsSet(LS,JSON.stringify(m))}
   function esc(s){return (s==null?'':String(s)).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
   function glossaryText(){return (DATA.glossary||[]).map(function(g){return '- '+g.term+': '+g.plain+(g.why?(' ('+g.why+')'):'')}).join('\n')}
   function globalCtx(){var c=DATA.context||{},d=(c.decisions||[]);return d.length?('\n\nFULL PLAN (for cross-reference only): '+d.join(' | ')):'';}
@@ -543,12 +635,24 @@ CHAT_JS = r"""
     return {clean:clean,terms:terms};
   }
   async function ask(sys,convo){
-    var key=localStorage.getItem(KK);
+    var model=lsGet(MK)||DATA.model;
+    if(/gemini/i.test(model)){  // Google Gemini: different endpoint + contents/parts shape (assistant->model)
+      var gk=lsGet('trainlint_gemini_key');
+      if(!gk) throw new Error('No Gemini API key — click "Set API key" and pick a gemini model.');
+      var contents=convo.map(function(m){return {role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}});
+      var gres=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(gk),
+        {method:'POST',headers:{'content-type':'application/json'},
+         body:JSON.stringify({system_instruction:{parts:[{text:sys}]},contents:contents,generationConfig:{maxOutputTokens:1024}})});
+      if(!gres.ok){var gt=await gres.text();throw new Error('Gemini '+gres.status+': '+gt.slice(0,200));}
+      var gj=await gres.json();
+      return ((((gj.candidates||[])[0]||{}).content||{}).parts||[]).map(function(p){return p.text||''}).join('');
+    }
+    var key=lsGet(KK);
     if(!key) throw new Error('No API key set — click "Set API key" (bottom-right).');
     var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
         'anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:localStorage.getItem(MK)||DATA.model,max_tokens:1024,system:sys,messages:convo})});
+      body:JSON.stringify({model:model,max_tokens:1024,system:sys,messages:convo})});
     if(!res.ok){var t=await res.text();throw new Error('API '+res.status+': '+t.slice(0,200));}
     var j=await res.json();
     return (j.content||[]).filter(function(b){return b.type==='text'}).map(function(b){return b.text}).join('');
@@ -573,9 +677,11 @@ CHAT_JS = r"""
     // one widget for BOTH decision blocks (data-dec -> DATA.decisions) and every other report
     // block (data-block -> DATA.blocks). Decisions are just one KIND of block (generic-widget).
     var decId=node.getAttribute('data-dec'), blockId=node.getAttribute('data-block');
+    var focusText=node.getAttribute('data-focus');  // per-ITEM widget: its own text is the focus
     var id, sys, ph;
-    if(decId){var dec=DATA.decisions[decId]; if(!dec) return; id=decId; sys=sysPrompt(dec); ph='Ask anything about this decision…';}
-    else if(blockId){var b=(DATA.blocks||{})[blockId]; if(!b) return; id=blockId; sys=sysPromptBlock(b); ph='Ask anything about this section…';}
+    if(decId){var dec=DATA.decisions[decId]; if(!dec) return; id=decId; sys=sysPrompt(dec); ph='Ask about this decision…';}
+    else if(blockId){var b=(DATA.blocks||{})[blockId]; if(!b) return; id=blockId; sys=sysPromptBlock(b); focusText=focusText||(b.title+': '+b.text); ph='Ask about this section…';}
+    else if(focusText){id='focus:'+focusText.slice(0,40); sys=sysPromptBlock({title:'Report item',text:focusText}); ph='Ask about this…';}
     else return;
     var convo=[];
     var btn=document.createElement('button'); btn.className='tl-ask'; btn.textContent='💬 Ask about this';
@@ -590,13 +696,24 @@ CHAT_JS = r"""
     renderSaved(saved,id);
     btn.addEventListener('click',function(e){e.preventDefault();panel.classList.toggle('open');});
     function addMsg(cls,who,txt){var d=document.createElement('div');d.className='tl-msg '+cls;d.innerHTML='<b>'+who+'</b> '+esc(txt);log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
+    async function askBackend(decId,question,conv){  // the LIVE local backend: full substrate + grep
+      var res=await fetch('chat',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({project:DATA.project,question:question,decision_id:(decId&&decId.indexOf('focus:')<0?decId:null),focus:focusText||null,history:conv.slice(0,-1)})});
+      if(!res.ok) throw new Error('chat backend '+res.status);
+      var j=await res.json(); if(j.error) throw new Error(j.error); return j.answer||'';
+    }
     async function go(){
       var q=ta.value.trim(); if(!q) return; ta.value='';
       addMsg('u','You:',q); convo.push({role:'user',content:q});
-      send.disabled=true; var wait=addMsg('a','Claude:','…thinking');
+      send.disabled=true; var wait=addMsg('a','Assistant:','');
+      wait.innerHTML="<b>Assistant:</b> <span class='tl-typing'><i></i><i></i><i></i></span>"+
+        "<div class='tl-skel'><span></span><span></span><span></span></div>";
       try{
-        var raw=await ask(sys,convo), pm=parseMemory(raw);
-        wait.innerHTML="<b>Claude:</b> "+esc(pm.clean); convo.push({role:'assistant',content:raw});
+        var raw;
+        try{ raw=await askBackend(id,q,convo); }        // served -> rich live context
+        catch(e){ raw=await ask(sys,convo); }           // bare-file fallback -> baked context
+        var pm=parseMemory(raw);
+        wait.innerHTML="<b>Assistant:</b> "+esc(pm.clean); convo.push({role:'assistant',content:raw});
         var m=mem(); m.faq=m.faq||{}; m.faq[id]=m.faq[id]||[];
         m.faq[id].push({q:q,a:pm.clean,ts:new Date().toISOString()});
         m.glossary=m.glossary||[];
@@ -611,7 +728,14 @@ CHAT_JS = r"""
   function toolbar(){
     var bar=document.createElement('div'); bar.className='tl-bar';
     var k=document.createElement('button'); k.textContent='🔑 Set API key';
-    k.onclick=function(){var v=prompt('Anthropic API key (stored only in this browser):',localStorage.getItem(KK)||'');if(v!=null)localStorage.setItem(KK,v.trim());};
+    k.onclick=function(){
+      var mdl=prompt('Model — anthropic claude-* OR google gemini-* (e.g. gemini-2.5-flash):',lsGet(MK)||DATA.model);
+      if(mdl!=null&&mdl.trim())lsSet(MK,mdl.trim());
+      var isG=/gemini/i.test(lsGet(MK)||DATA.model);
+      var slot=isG?'trainlint_gemini_key':KK;
+      var v=prompt((isG?'Gemini':'Anthropic')+' API key (stored only in this browser):',lsGet(slot)||'');
+      if(v!=null)lsSet(slot,v.trim());
+    };
     var ex=document.createElement('button'); ex.textContent='⬇ Export memory';
     ex.onclick=function(){var m=mem(),blob={project:DATA.project,faq:m.faq||{},glossary:m.glossary||[],mastered:m.mastered||{}};
       var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(blob,null,2)],{type:'application/json'}));
@@ -649,13 +773,46 @@ QUIZ_CSS = """
 """
 
 # Plain string (own braces/backticks). Reads the same <script id="tl-data"> blob as the chatbot.
+# The tab switcher for the report's sectioned body (.rnav / .rsec). Remembers the last-open tab
+# per project; honors #hash deep links; a click on a cross-section anchor (e.g. a timeline row's
+# "📖 now readable" pointing into the tree) flips to the target's tab before the browser jumps.
+NAV_JS = r"""
+(function(){
+  var secs=[].slice.call(document.querySelectorAll('.rsec'));
+  if(!secs.length) return;
+  var btns=[].slice.call(document.querySelectorAll('.rnav button'));
+  if(!btns.length){secs.forEach(function(s){s.classList.add('on')});return;}
+  var KEY='trainlint_tab_'+((document.title||'').split(' ')[0]);
+  function show(id,save){
+    if(id!=='all'&&!secs.some(function(s){return s.id===id})) id=secs[0].id;
+    secs.forEach(function(s){s.classList.toggle('on',id==='all'||s.id===id)});
+    btns.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-sec')===id)});
+    if(save){try{localStorage.setItem(KEY,id)}catch(e){}}
+  }
+  btns.forEach(function(b){b.addEventListener('click',function(){show(b.getAttribute('data-sec'),true)});});
+  var start=null,h=(location.hash||'').slice(1);
+  if(h){var el=document.getElementById(h); if(el&&el.closest){var s=el.closest('.rsec'); if(s) start=s.id;}}
+  if(!start){try{start=localStorage.getItem(KEY)}catch(e){}}
+  show(start||secs[0].id,false);
+  if(h){var el2=document.getElementById(h); if(el2&&el2.scrollIntoView) el2.scrollIntoView();}
+  document.addEventListener('click',function(e){
+    var a=e.target&&e.target.closest?e.target.closest('a[href^="#"]'):null;
+    if(!a) return;
+    var el=document.getElementById(a.getAttribute('href').slice(1));
+    if(!el||!el.closest) return;
+    var s=el.closest('.rsec');
+    if(s&&!s.classList.contains('on')) show(s.id,false);
+  });
+})();
+"""
+
 QUIZ_JS = r"""
 (function(){
   var el=document.getElementById('tl-data'); if(!el) return;
   var DATA=JSON.parse(el.textContent);
   var LS='trainlint_mem_'+DATA.project;
   function mem(){try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return{}}}
-  function setMem(m){localStorage.setItem(LS,JSON.stringify(m))}
+  function setMem(m){try{localStorage.setItem(LS,JSON.stringify(m))}catch(e){}}
   function esc(s){return (s==null?'':String(s)).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
   function init(node){
     var decId=node.getAttribute('data-dec'), dec=DATA.decisions[decId]; if(!dec||!dec.quiz) return;
@@ -863,6 +1020,63 @@ def planning_story_html(motivation, goal, bar, pl):
     return _render_beats(planning_story_beats(motivation, goal, bar, pl))
 
 
+# The report's HOOK: a report is a story of its SURPRISES (voice rule 6), not a did-list. This band
+# leads with where reality broke from intuition. Fed by surprises.<name>.jsonl:
+#   {ts, valence, headline, detail, direction?}. Empty file -> nothing renders.
+SURPRISE_LABEL = {
+    "assumed-bottleneck-not":  "looked like the bottleneck — wasn't",
+    "hidden-bottleneck":       "the real wall, hidden in a 'done' decision",
+    "hard-turned-free":        "looked hard — was free",
+    "easy-turned-hard":        "looked trivial — was the wall",
+    "metric-green-output-bad": "green metric, quietly-wrong output",
+    "doubt":                   "a genuine doubt",
+}
+
+
+def surprises_html(surprises):
+    """The 🎢 band — the intuition-vs-reality gaps, newest first. Each card = a valence badge +
+    a headline + one detail line. This is the report's lead hook, not a footnote."""
+    if not surprises:
+        return ""
+    rows = sorted((s for s in surprises if isinstance(s, dict) and s.get("headline")),
+                  key=lambda s: s.get("ts", ""), reverse=True)
+    if not rows:
+        return ""
+    cards = []
+    for s in rows:
+        val = s.get("valence", "")
+        badge = _e(SURPRISE_LABEL.get(val, val or "surprise"))
+        dirn = f" <span class='surp-dir'>{_e(s.get('direction'))}</span>" if s.get("direction") else ""
+        _f = _e(f"SURPRISE ({val}) — {s.get('headline','')}: {s.get('detail','')}"
+                + (f"  [direction: {s.get('direction')}]" if s.get("direction") else ""))
+        cards.append(
+            f"<div class='surp surp-{_e(val)}'>"
+            f"<div class='surp-h'><span class='surp-badge'>{badge}</span>{dirn}</div>"
+            f"<div class='surp-head'>{_ec(s.get('headline',''))}</div>"
+            f"<div class='surp-d'>{_ec(s.get('detail',''))}</div>"
+            f"<div class='tl-chat' data-focus=\"{_f}\"></div></div>")
+    return ("<div class='surprises'><div class='surp-title'>🎢 What surprised us — "
+            "where reality broke from the plan</div>" + "".join(cards) + "</div>")
+
+
+def purpose_funnel_html(purpose, mt=None):
+    """The report's OPENING line — one plain sentence of why this exists (the whole point, big→small).
+    Fed by purpose.<name>.txt; any 'LABEL:' prefixes are stripped and the lines joined into one lead.
+    Empty purpose -> nothing (the missing-purpose lint nags instead)."""
+    if not purpose:
+        return ""
+    parts = []
+    for line in purpose.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if ":" in line and line.split(":", 1)[0].isupper():
+            line = line.split(":", 1)[1].strip()
+        parts.append(line)
+    lead = " ".join(parts).strip()
+    return f"<div class='lead'>{_ec(lead)}</div>" if lead else ""
+
+
 def focus_section_html(name):
     """CURRENT FOCUS — the active trial-and-error work right now (distinct from the main thread,
     which is ONE decision, and pillars, which are settled core dimensions). Reads
@@ -886,13 +1100,15 @@ def focus_section_html(name):
         st = str(it.get("status", "trying")).lower()
         dec = f"<span class='fdec'>{_e(it.get('decision',''))}</span>" if it.get("decision") else ""
         nxt = f"<div class='fnext'><b>next:</b> {_ec(it.get('next',''))}</div>" if it.get("next") else ""
+        _f = _e(f"FOCUS ITEM [{st}] {it.get('title','')} — trying: {it.get('trying','')}; next: {it.get('next','')}")
         cards.append(
             f"<div class='fcard'>"
             f"<div class='fhead'><span class='fst' style='background:{color.get(st,'#64748b')}'>{_e(st)}</span>"
             f"<span class='ftitle'>{_ec(it.get('title',''))}</span>{dec}</div>"
-            f"<div class='ftry'>{_ec(it.get('trying',''))}</div>{nxt}</div>")
+            f"<div class='ftry'>{_ec(it.get('trying',''))}</div>{nxt}"
+            f"<div class='tl-chat' data-focus=\"{_f}\"></div></div>")
     return ("<div class='focussec'><div class='fshdr'>🎯 CURRENT FOCUS — what we're actively trying now</div>"
-            + "".join(cards) + "<div class='tl-chat' data-block='current-focus'></div></div>")
+            + "".join(cards) + "</div>")
 
 
 def data_section_html(pl):
@@ -1120,7 +1336,8 @@ def glossary_html(glossary):
 
 
 def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_order,
-                glossary=None, clarify=None, motivation=""):
+                glossary=None, clarify=None, motivation="", tldr="", surprises=None, purpose="",
+                narrative=""):
     glossary, clarify = glossary or [], clarify or []
     gmap = _gloss_map(glossary)
     summ = plan.summary(pl)
@@ -1139,14 +1356,28 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
 
     # ---- header / TLDR ----
     H.append("<div class='hdr'>")
-    if planning:
-        H.append(f"<h1>{_e(name)}</h1><div class='sub'>Trainlint plan · a plan in progress — "
-                 "motivation · goal · decisions · next (no experiments run yet)</div>")
-        H.append(planning_story_html(motivation, goal, bar, pl))
+    _sub = ("Trainlint plan · a plan in progress — motivation · goal · decisions · next"
+            if planning else
+            "research tree · the project as one story: want · problem · bottleneck · did · next")
+    H.append(f"<h1>{_e(name)}</h1><div class='sub'>{_sub}</div>")
+    if narrative:  # LLM wrote the prose — it replaces the templated lead+tldr+surprises+newly-done
+        H.append(f"<div class='llm'>{_md2html(narrative)}</div>")
     else:
-        H.append(f"<h1>{_e(name)}</h1><div class='sub'>research tree · a Trainlint derived view — "
-                 "the project as one story: want · problem · bottleneck · did · next</div>")
-        H.append(story_html(goal, bar, pl, nodes, rows))
+        _lead = purpose_funnel_html(purpose, mt)  # one plain lead line: why we're doing this
+        if not _lead and goal:  # no purpose authored yet -> the GOAL is still the reader's anchor
+            _lead = f"<div class='lead'>{_ec(goal)}</div>"
+        H.append(_lead)
+        if tldr:  # TL;DR — one bullet per line of tldr.<name>.txt
+            _tl = [ln.strip().lstrip("-•* \t").strip() for ln in tldr.splitlines() if ln.strip()]
+            _body = ("<ul class='tldr-list'>" + "".join(f"<li>{_ec(l)}</li>" for l in _tl) + "</ul>"
+                     if len(_tl) > 1 else (_ec(_tl[0]) if _tl else ""))
+            H.append(f"<div class='tldr'><span class='tldr-tag'>TL;DR</span>{_body}</div>")
+    if bar:  # the DONE bar (the project's success criterion) always shows, whoever wrote the prose
+        H.append(f"<div class='kv'><span class='k'>DONE</span><span>{_ec(bar)}</span></div>")
+    if planning:  # planning stage has no log/tree yet -> the plan-only arc is fine; the mature
+        H.append(planning_story_html(motivation, goal, bar, pl))  # 5-beat is dropped (redundant with
+    # the lead line + surprises + newly-done + focus + timeline, and it lied "nothing done" when the
+    # tree had no verdicts even though the log was full).
     H.append("<div class='score'><div class='dots'>" + _dots(counts) + "</div>"
              f"<div class='lbl'>{summ.get('decided_built',0)}/{counts.get('decided',0)} decided built · "
              f"{counts.get('verified',0)} verified · {counts.get('open',0)} open  "
@@ -1154,53 +1385,66 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
     if pillars:
         H.append("<div class='chips'>" + "".join(
             f"<span class='chip pillar'>◆ {_e(p['id'])}</span>" for p in pillars) + "</div>")
-    if avoided:
-        H.append("<div class='rej'><b>don't drift back:</b> " +
-                 " · ".join(_e(a["not_this"]) for a in avoided if a.get("not_this")) + "</div>")
+    # NOTE: the anti-prior "don't drift back" list (plan.avoided / not_this) is an AGENT guardrail —
+    # it stops the model regressing to a rejected approach, and it lives in the compass + doorman for
+    # that purpose. It is NOT for the human reader (terse regex-adjacent jargon), so it is deliberately
+    # NOT rendered in this report. A human-facing "what we ruled out, and why" belongs in the story
+    # (plain prose + the reason), authored — not this auto-dump.
     try:
         import goalcheck as _gc  # noqa: E402
         _gd = _gc.brief(name)
     except Exception:
         _gd = ""
-    if _gd:
-        H.append("<div class='rej'><b>⚠️ goal↔scope drift:</b> " + _e(_gd) + "</div>")
+    if _gd:  # _gd is self-labeled (means-first and/or scope-drift) — render as-is
+        H.append("<div class='rej'>" + _e(_gd) + "</div>")
     H.append("</div>")  # hdr
 
-    # ---- 🆕 NEWLY DONE: what changed on the latest run (from the dated log) ----
-    _new_ids, _new_date = newly_done(name)
-    if _new_ids:
-        _names = " · ".join(f"<code>{_e(i)}</code>" for i in sorted(_new_ids))
-        H.append(f"<div class='newbar'><b>🆕 Newly done ({_e(_new_date)}):</b> {_names}</div>")
+    # ---- SECTIONED BODY: everything below the header is grouped into tabbed sections behind
+    # the sticky .rnav bar (one view on screen at a time — the whole report was one endless
+    # scroll). An empty section drops out, taking its tab with it; NAV_JS drives the switching.
+
+    # ---- 🎢 SURPRISES: always render the structured band (each card carries its own per-item
+    # chatbox) — even under the LLM narrative, so every surprise stays individually askable. ----
+    now_sec = [surprises_html(surprises)]
+
+    # ---- 🆕 NEWLY DONE: which DECISION(s) moved this run, in one short plain sentence each
+    # (the decision's `plain` field — jargon-free by design). All dated detail is in the Timeline
+    # below; this bar stays a one-glance summary, never a note dump. ----
+    _new_ids, _new_date = newly_done(name)  # id-set also powers the per-decision 🆕 badge in the spine
+    if _new_ids and not narrative:
+        _id2plain = {n.get("id"): (n.get("plain") or n.get("decision", "")) for n in pl}
+        _ids = sorted(_new_ids)
+        _phr = " · ".join(_ec(_id2plain.get(i, i)) for i in _ids[:2])
+        if len(_ids) > 2:
+            _phr += f" (+{len(_ids) - 2} more — see Timeline)"
+        now_sec.append(f"<div class='newbar'>🆕 <b>Newly done ({_e(_new_date)}):</b> {_phr}</div>")
 
     # ---- CURRENT FOCUS: the active trial-and-error work right now ----
-    H.append(focus_section_html(name))
+    now_sec.append(focus_section_html(name))
 
-    # ---- DATA section: the one place that DEMONSTRATES the data types (both modes) ----
-    H.append(data_section_html(pl))
+    # ---- DATA section + pipeline: what the project reads & writes, and the REAL data flow ----
+    flow_sec = [data_section_html(pl), pipeline_html(name)]
 
-    # ---- pipeline: the REAL data flow (authored in pipeline.<name>.jsonl; empty -> nothing) ----
-    H.append(pipeline_html(name))
-
-    # ---- legend ----
+    # ---- legend (lives with the decisions it explains) ----
     if planning:
-        H.append("<div class='legend'>"
-                 "<span><b>decisions</b> ✓ verified ◐ decided+built ✎ decided on paper (not built) ○ open</span>"
-                 "<span>◆ pillar — a core dimension the project always rests on</span>"
-                 "<span>★ main thread — the one decision to settle next</span>"
-                 "<span>click a decision to see its principle (or ask its chatbot)</span></div>")
+        legend = ("<div class='legend'>"
+                  "<span><b>decisions</b> ✓ verified ◐ decided+built ✎ decided on paper (not built) ○ open</span>"
+                  "<span>◆ pillar — a core dimension the project always rests on</span>"
+                  "<span>★ main thread — the one decision to settle next</span>"
+                  "<span>click a decision to see its principle (or ask its chatbot)</span></div>")
     else:
-        H.append("<div class='legend'>"
-                 "<span><b>spine</b> ✓ verified ◐ decided+built ✎ decided on paper (not built) ○ open</span>"
-                 "<span><b>tree</b> ⚠ open problem · ✓ wall closed · ◆ tested · ↩ backtracked · ● decided · ○ idea</span>"
-                 "<span><b>edges</b> ⚠ wall → 📖 paper it unlocks</span>"
-                 "<span>click a decision to see its principle</span></div>")
+        legend = ("<div class='legend'>"
+                  "<span><b>spine</b> ✓ verified ◐ decided+built ✎ decided on paper (not built) ○ open</span>"
+                  "<span><b>tree</b> ⚠ open problem · ✓ wall closed · ◆ tested · ↩ backtracked · ● decided · ○ idea</span>"
+                  "<span><b>edges</b> ⚠ wall → 📖 paper it unlocks</span>"
+                  "<span>click a decision to see its principle</span></div>")
 
     # ---- timeline (suppressed at planning stage — nothing has happened yet) ----
+    tl_sec = []
     if not planning:
-        H.append("<h2 class='sec'>Timeline — how the search got here</h2>")
-    if not planning:
+        tl_sec.append("<h2 class='sec'>Timeline — how the search got here</h2>")
         if rows:
-            H.append("<div class='card tl'>")
+            tl_sec.append("<div class='card tl'>")
             for r in rows:
                 g, col, lbl = KIND.get(r["kind"], ("•", "#64748b", r["kind"]))
                 d = r["delta"]
@@ -1212,15 +1456,17 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
                 if r["paper"]:
                     read = (f"<br><a class='read' href='#kn-{_e(r['paper']['id'])}'>"
                             f"📖 now readable: {_e(_trunc(r['paper']['title'],46))}</a>")
-                H.append(f"<div class='row'><div class='date'>{_e(r['ts'])}</div>"
-                         f"<div class='mk' style='color:{col}'>{g}</div>"
-                         f"<div class='body'><span class='dir'>{_e(r['direction'])}</span>"
-                         f"<span class='knd'>{_e(lbl)}</span>{dhtml}"
-                         f"<div class='note'>{_e(r['note'])}{read}</div></div></div>")
-            H.append("</div>")
+                _tf = _e(f"TIMELINE {r['ts']} [{lbl}] {r['direction']}: {r['note']}")
+                tl_sec.append(f"<div class='row'><div class='date'>{_e(r['ts'])}</div>"
+                              f"<div class='mk' style='color:{col}'>{g}</div>"
+                              f"<div class='body'><span class='dir'>{_e(r['direction'])}</span>"
+                              f"<span class='knd'>{_e(lbl)}</span>{dhtml}"
+                              f"<div class='note'>{_e(r['note'])}{read}</div>"
+                              f"<div class='tl-chat' data-focus=\"{_tf}\"></div></div></div>")
+            tl_sec.append("</div>")
         else:
-            H.append("<div class='card'><div class='empty'>No dated events harvested yet — the "
-                     "timeline fills in from the session log (walls, verdicts, backtracks).</div></div>")
+            tl_sec.append("<div class='card'><div class='empty'>No dated events harvested yet — the "
+                          "timeline fills in from the session log (walls, verdicts, backtracks).</div></div>")
 
     # ---- decision spine (full-width at planning stage; beside the search tree once it exists) ----
     spine = ["<div><h2 class='sec'>"
@@ -1284,16 +1530,34 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
         if _collapse:
             spine.append("</details>")
     spine.append("</div></div>")
+    dec_sec = [legend]
     if planning:
-        H.append("".join(spine))
+        dec_sec.append("".join(spine))
     else:
-        H.append("<div class='cols'>")
-        H.append("".join(spine))
-        H.append("<div><h2 class='sec'>Search tree — the directions explored</h2>"
-                 "<div class='card' style='padding:12px 8px;overflow-x:auto'>")
-        H.append(tree_svg(nodes, knowledge, kinds, id2phase, phase_order))
-        H.append("</div></div>")
-        H.append("</div>")  # cols
+        dec_sec.append("<div class='cols'>")
+        dec_sec.append("".join(spine))
+        dec_sec.append("<div><h2 class='sec'>Search tree — the directions explored</h2>"
+                       "<div class='card' style='padding:12px 8px;overflow-x:auto'>")
+        dec_sec.append(tree_svg(nodes, knowledge, kinds, id2phase, phase_order))
+        dec_sec.append("</div></div>")
+        dec_sec.append("</div>")  # cols
+
+    # ---- nav bar + sections: a tab only exists when its section has content; the glossary
+    # (a one-line collapsed box) and the foot stay outside the tabs, always visible. ----
+    secs = [(i, l, h) for i, l, h in (
+        ("sec-now", "🎢 Now", "".join(p for p in now_sec if p)),
+        ("sec-flow", "🔀 Data &amp; pipeline", "".join(p for p in flow_sec if p)),
+        ("sec-timeline", "📅 Timeline", "".join(tl_sec)),
+        ("sec-decisions", "🧭 Decisions", "".join(dec_sec)),
+    ) if h.strip()]
+    if len(secs) > 1:
+        H.append("<div class='rnav'>" + "".join(
+            f"<button type='button' data-sec='{i}'>{l}</button>" for i, l, _ in secs)
+            + "<button type='button' data-sec='all'>⊞ All</button></div>")
+    # the first section ships pre-opened server-side: if the viewer strips <script> (some inline
+    # renderers do), the reader still gets the header + lead section instead of a blank body
+    for k, (i, _l, h) in enumerate(secs):
+        H.append(f"<section class='rsec{' on' if k == 0 else ''}' id='{i}'>{h}</section>")
 
     H.append(glossary_html(glossary))
 
@@ -1306,6 +1570,7 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
              + _chat_blob(name, goal, pl, glossary, clarify) + "</script>")
     H.append("<script>" + CHAT_JS + "</script>")
     H.append("<script>" + QUIZ_JS + "</script>")
+    H.append("<script>" + NAV_JS + "</script>")
     H.append("</body></html>")
     return "\n".join(H)
 
@@ -1383,7 +1648,7 @@ var h=parseInt((location.hash||'').slice(1),10);show(isNaN(h)?0:h-1);})();
 
 
 def render_slides(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_order,
-                  glossary=None, clarify=None, motivation=""):
+                  glossary=None, clarify=None, motivation="", tldr=""):
     """A slide deck for the SAME project as render_html — one self-contained, OFFLINE
     .slides.html (no CDN, no reveal.js; the paging engine is the inlined DECK_JS). Reuses every
     data builder the HTML report uses (story_beats / spine_groups / timeline_rows / tree_svg /
@@ -1530,6 +1795,11 @@ def _load_project(name):
     goal, bar = split_goal(gp.read_text(encoding="utf-8") if gp.exists() else "")
     mp = paths.resolve(f"motivation.{name}.txt")
     motivation = " ".join(mp.read_text(encoding="utf-8").split()) if mp.exists() else ""
+    tp = paths.resolve(f"tldr.{name}.txt")
+    tldr = tp.read_text(encoding="utf-8").strip() if tp.exists() else ""  # keep line breaks -> bullets
+    pp = paths.resolve(f"purpose.{name}.txt")
+    purpose = pp.read_text(encoding="utf-8").strip() if pp.exists() else ""
+    surprises = tree._load_jsonl(paths.resolve(f"surprises.{name}.jsonl"))
     kinds = {}
     for e in tree.load_events(name, facts):
         d = e.get("direction")
@@ -1543,7 +1813,136 @@ def _load_project(name):
     return {"name": name, "facts": facts, "nodes": nodes, "pl": pl, "know": know,
             "goal": goal, "bar": bar, "kinds": kinds, "id2phase": id2phase,
             "phase_order": phase_order, "glossary": glossary, "clarify": clarify,
-            "motivation": motivation}
+            "motivation": motivation, "tldr": tldr, "purpose": purpose, "surprises": surprises}
+
+
+# --- optional LLM-written narrative (same HTML shell; just a swappable LLM entry) ----------------
+# The report's prose is normally templated. Set TRAINLINT_REPORT_LLM=kimi|claude|gemini to have an LLM
+# WRITE the opening narrative from the same substrate; it renders into the SAME report shell.
+REPORT_SYS = (
+    "Write a terse status report for the operator who owns this project. Open with ONE plain sentence "
+    "(what this is + why, from `purpose`). Then LEAD with the SURPRISES — where reality broke from "
+    "intuition (from `surprises`): looked-hard-was-trivial, looked-trivial-was-the-wall, assumed-vs-"
+    "real bottleneck; make them the spine. Then what we DID/built (from `log`, newest first) and NEXT "
+    "(from `focus`). <=3 sentences per point, plain language, no ceremony; mechanical passing is the "
+    "floor, never celebrated. Ground every claim in the data; invent nothing. Output short Markdown.")
+
+
+def _llm(provider, sysp, userp):
+    """One swappable LLM entry: 'kimi' (CLI, subscription), 'gemini' (GEMINI_API_KEY), else 'claude'
+    (Claude Code subscription OAuth via modeljudge). Returns the model's text."""
+    if provider == "kimi":
+        import subprocess
+        r = subprocess.run(["kimi", "--print", "-y", "--output-format", "stream-json",
+                            "-p", sysp + "\n\n" + userp], capture_output=True, text=True, timeout=240)
+        texts = []
+        for line in r.stdout.splitlines():
+            try:
+                d = json.loads(line)
+            except Exception:
+                continue
+
+            def walk(o):
+                if isinstance(o, dict):
+                    if o.get("type") == "text" and isinstance(o.get("text"), str):
+                        texts.append(o["text"])
+                    for v in o.values():
+                        walk(v)
+                elif isinstance(o, list):
+                    for v in o:
+                        walk(v)
+            walk(d)
+        return max(texts, key=len) if texts else ""
+    if provider == "codex":
+        import subprocess
+        import tempfile
+        outf = tempfile.NamedTemporaryFile("w", suffix=".md", delete=False).name
+        subprocess.run(["codex", "exec", "--skip-git-repo-check", "--sandbox", "read-only",
+                        "-o", outf, sysp + "\n\n" + userp],
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
+        try:
+            return Path(outf).read_text(encoding="utf-8").strip()
+        except Exception:
+            return ""
+    if provider == "gemini":
+        import os
+        import urllib.request
+        key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not key:
+            return ""
+        model = os.environ.get("TRAINLINT_GEMINI_MODEL", "gemini-2.5-flash")
+        body = json.dumps({"system_instruction": {"parts": [{"text": sysp}]},
+                           "contents": [{"role": "user", "parts": [{"text": userp}]}],
+                           "generationConfig": {"maxOutputTokens": 2048}}).encode()
+        req = urllib.request.Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
+            data=body, headers={"content-type": "application/json"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            j = json.loads(resp.read())
+        return "".join(p.get("text", "") for p in j["candidates"][0]["content"]["parts"])
+    import importlib
+    import sys as _sys
+    _sys.path.insert(0, str(ROOT.parent / "hooks"))
+    c = importlib.import_module("modeljudge")._client()
+    if c is None:
+        return ""
+    r = c.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=sysp,
+                          messages=[{"role": "user", "content": userp}])
+    return "".join(getattr(b, "text", "") for b in r.content).strip()
+
+
+def _md2html(md):
+    """Minimal markdown -> HTML for the LLM narrative (## headers, - bullets, **bold**, paragraphs)."""
+    md = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", _e(md).replace("&lt;b&gt;", "").replace("&lt;/b&gt;", ""))
+    out, ul = [], False
+    for line in md.splitlines():
+        s = line.strip()
+        if s.startswith("- ") or s.startswith("* "):
+            if not ul:
+                out.append("<ul>"); ul = True
+            out.append(f"<li>{s[2:]}</li>")
+            continue
+        if ul:
+            out.append("</ul>"); ul = False
+        if s.startswith("### ") or s.startswith("## ") or s.startswith("# "):
+            out.append(f"<h4>{s.lstrip('# ')}</h4>")
+        elif s:
+            out.append(f"<p>{s}</p>")
+    if ul:
+        out.append("</ul>")
+    return "".join(out)
+
+
+def llm_narrative(name, provider):
+    """Gather the substrate and let the chosen LLM write the report prose (or '' on failure)."""
+    def read(fn):
+        p = paths.resolve(fn)
+        return p.read_text(encoding="utf-8").strip() if p.exists() else ""
+
+    def jl(fn):
+        p = paths.resolve(fn)
+        out = []
+        if p.exists():
+            for x in p.read_text(encoding="utf-8").splitlines():
+                x = x.strip()
+                if not x or x.startswith("#"):
+                    continue
+                try:
+                    out.append(json.loads(x))
+                except Exception:
+                    pass
+        return out
+    pl = plan.load(name)
+    data = {"purpose": read(f"purpose.{name}.txt"), "goal": read(f"goal.{name}.txt"),
+            "decisions": [{"id": d.get("id"), "status": d.get("status"),
+                           "plain": d.get("plain") or d.get("decision"), "built": bool(d.get("artifact"))}
+                          for d in pl],
+            "log": jl(f"log.{name}.jsonl"), "surprises": jl(f"surprises.{name}.jsonl"),
+            "focus": jl(f"focus.{name}.jsonl")}
+    try:
+        return _llm(provider, REPORT_SYS, "Project data (JSON):\n" + json.dumps(data, ensure_ascii=False))
+    except Exception:
+        return ""
 
 
 def generate(name):
@@ -1564,17 +1963,24 @@ def generate(name):
         serve.ensure(outdir)
     except Exception:
         pass
+    import os
+    _prov = os.environ.get("TRAINLINT_REPORT_LLM", "codex").strip().lower()  # default: codex writes the prose
+    if _prov in ("none", "off", "0", "false", "template"):  # any opt-out spelling -> templated prose
+        _prov = ""
+    narrative = llm_narrative(name, _prov) if _prov else ""
     htmlpath = outdir / f"{name}.html"
     htmlpath.write_text(render_html(d["name"], d["goal"], d["bar"], d["pl"], d["nodes"],
                                     d["know"], d["kinds"], d["id2phase"], d["phase_order"],
                                     glossary=d["glossary"], clarify=d["clarify"],
-                                    motivation=d["motivation"]),
+                                    motivation=d["motivation"], tldr=d["tldr"],
+                                    surprises=d["surprises"], purpose=d["purpose"],
+                                    narrative=narrative),
                         encoding="utf-8")
     slidespath = outdir / f"{name}.slides.html"
     slidespath.write_text(render_slides(d["name"], d["goal"], d["bar"], d["pl"], d["nodes"],
                                         d["know"], d["kinds"], d["id2phase"], d["phase_order"],
                                         glossary=d["glossary"], clarify=d["clarify"],
-                                        motivation=d["motivation"]),
+                                        motivation=d["motivation"], tldr=d["tldr"]),
                           encoding="utf-8")
     try:
         import push
