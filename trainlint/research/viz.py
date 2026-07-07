@@ -548,6 +548,11 @@ details.dec>summary::-webkit-details-marker{display:none}
 .anclink{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;color:#fff;
   background:#2563eb;border-radius:14px;padding:2px 10px;text-decoration:none;white-space:nowrap}
 .anclink:hover{background:#1d4ed8}
+.ancbar{display:block;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;color:#1e3a8a;
+  font-size:13px;padding:11px 15px;margin:12px 0 4px;text-decoration:none}
+.ancbar:hover{background:#dbeafe}
+.ancbar .anch-red{color:#b91c1c}
+.ancbar-go{float:right;font-weight:700;color:#2563eb}
 .anccode{max-height:340px;overflow:auto}
 .anccmd{font-size:10.5px;color:#94a3b8;margin-top:3px}
 .anccmd code{user-select:all;background:#f8fafc;border-radius:4px;padding:0 4px}
@@ -2052,6 +2057,13 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
         if _acnt["unanchored"]:
             parts.append(f"<b class='anch-red'>✗ {_acnt['unanchored']} built with NO code to review</b>")
         anch_line = "<span><b>anchors</b> ⛓ " + " · ".join(parts) + "</span>"
+        # the LANDING tab must point at the code, or a reviewer never finds it (the code lives
+        # 2 clicks deep in 🧭 Decisions; this strip is the front-door). NAV_JS's #href handler
+        # switches tabs on click; with JS stripped it's a plain in-page anchor to the same section.
+        now_sec.insert(0, (
+            "<a class='ancbar' href='#sec-decisions'>⛓ <b>Code under review:</b> "
+            + " · ".join(parts)
+            + " <span class='ancbar-go'>see every decision's code →</span></a>"))
 
     # ---- legend (lives with the decisions it explains) ----
     if planning:
