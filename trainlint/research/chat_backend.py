@@ -393,6 +393,20 @@ def start_digest(project):
         return 202, {"ok": True, "state": "running", "pid": p.pid}
 
 
+# Sensitive routes whose owner-only gate lives in the WORKER. Until the worker's trailing-slash
+# normalization ships, a request like /r/<victim>/edit/ slips past that gate and the worker relays
+# "/edit/" here — and we'd rstrip it back to "/edit" and perform a CROSS-TENANT write/spawn. Legit
+# callers NEVER send a trailing slash (the report JS uses fetch('edit'|'digest'|'digest/status')),
+# so reject any trailing slash on these routes as belt-and-suspenders (harmless once the worker is
+# patched: it then 403s the attack before it ever reaches us). Matches flat + ns-prefixed shapes.
+_TRAILING_GUARD = re.compile(r"^(?:/[^/]+)?/(?:edit|digest|digest/status)/+$")
+
+
+def _is_trailing_slash_attack(raw_path):
+    p = raw_path.split("?", 1)[0]
+    return bool(_TRAILING_GUARD.match(p))
+
+
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -429,6 +443,9 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(out)
 
     def do_GET(self):
+        if _is_trailing_slash_attack(self.path):  # worker owner-gate bypass stopgap (see above)
+            self.send_error(404)
+            return
         if self.path.startswith("/invite"):  # one-click magic link: /invite?c=<code>
             import urllib.parse as up
             code = up.parse_qs(up.urlparse(self.path).query).get("c", [""])[0]
@@ -471,6 +488,9 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
+        if _is_trailing_slash_attack(self.path):  # worker owner-gate bypass stopgap (see above)
+            self.send_error(404)
+            return
         path = self.path.rstrip("/")
         if path == "/login":
             body = self.rfile.read(int(self.headers.get("content-length", 0))).decode()
