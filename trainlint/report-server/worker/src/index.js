@@ -446,8 +446,51 @@ export default {
         const granted = await grantedNamespaces(who.email, env);
         if (!granted.includes(targetNs)) return text("not found", 404);
       }
+      // Inline edits are OWNER-ONLY even through this shared-viewer relay. A granted viewer (or admin)
+      // reaches this line for another operator's ns — they may READ the report but must NEVER write
+      // back into that operator's substrate. The report page fetch('edit') resolves to /r/<ns>/edit
+      // when viewed here, so gate the /edit sub-path with the same rule as the /edit routes below:
+      // allowed only when this IS the caller's own ns. (Returns the 403 the editor UI expects.)
+      if ((rm[2] || "/") === "/edit" && targetNs !== ns) return text("editing is owner-only", 403);
       if (!(await agentConnected(targetNs, env))) return text("operator offline", 503);
       return relayToAgent(targetNs, rest, request, env);
+    }
+
+    // ---- in-report inline edit: OWNER-ONLY write relay -------------------------------------------
+    // Two shapes, one rule. POST /edit targets the caller's OWN ns. POST /<email>/edit resolves
+    // targetNs = nsForEmail(email) and is allowed ONLY when it equals the caller's own ns.
+    //
+    // This is DELIBERATELY STRICTER than every read route above: the /r/<ns>/ and /<email>/<report>
+    // routes let an admin or an accepted-share viewer READ another operator's report, but an edit
+    // writes back into that operator's LOCAL substrate files (plan/goal/purpose/glossary/…). Silently
+    // clobbering another operator's research is the one catastrophe we forbid outright — so there is
+    // NO admin bypass and NO shared-grant bypass here: targetNs must === the caller's own ns, full stop.
+    //
+    // Placement: this sits BEFORE the two-segment /<email>/<seg> matcher because "edit" is neither a
+    // .html (so its report regex won't catch it) nor "chat"/"login" (so its isControl branch won't
+    // either) — without an explicit branch /<email>/edit would fall through to 404. It sits AFTER the
+    // /r/<ns>/ handler (whose own /edit sub-path we owner-gated above) so shared-viewer relay keeps
+    // priority. The flat /edit is a single segment, so the /<email>/<seg> matcher never sees it.
+    // On success we relay to that ns's live agent exactly like /chat (method/body/content-type
+    // forwarded, always to the backend's /edit); no live agent → 503.
+    if (path === "/edit" && request.method === "POST") {
+      // Flat: the target is, by construction, the caller's own ns — inherently owner-only.
+      const targetNs = ns;
+      if (!(await agentConnected(targetNs, env))) return text("operator offline", 503);
+      return relayToAgent(targetNs, `/edit${url.search}`, request, env);
+    }
+    const editRoute = path.match(/^\/([^\/]+)\/edit$/);
+    if (editRoute && request.method === "POST") {
+      let email = "";
+      try { email = decodeURIComponent(editRoute[1]).trim().toLowerCase(); } catch { email = ""; }
+      if (email.includes("@") && email.length <= 254 && !email.includes("/")) {
+        const targetNs = await nsForEmail(email);
+        // OWNER-ONLY: not admin, not a shared grant. Anyone but the owner gets 403 (the editor UI
+        // catches this to drop into read-only mode).
+        if (targetNs !== ns) return text("editing is owner-only", 403);
+        if (!(await agentConnected(targetNs, env))) return text("operator offline", 503);
+        return relayToAgent(targetNs, `/edit${url.search}`, request, env);
+      }
     }
 
     // ---- per-user cross-namespace route: /<email>/<project>.html and POST /<email>/(chat|login) ----

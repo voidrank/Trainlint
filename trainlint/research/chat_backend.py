@@ -194,6 +194,151 @@ LOGIN_HTML = ("<!doctype html><meta name='viewport' content='width=device-width,
               "{msg}</form></body>")
 
 
+# ============================================================================================
+# IN-REPORT EDIT — the report OWNER writes ONE field of ONE structured item back to the LOCAL
+# substrate. Owner-only is enforced UPSTREAM in the worker (index.js): it relays an /edit only when
+# targetNs === the caller's own ns (stricter than the read routes — no admins, no shared grants).
+# This backend trusts the x-trainlint-relay header exactly like /chat's admin path and just performs
+# the guarded write. Every write is: (1) project name guarded by SAFE_NAME (no path traversal),
+# (2) kind + field whitelisted EXACTLY via EDIT_SPEC (an edit can NEVER address an arbitrary
+# file/key), (3) optimistic-locked on body.prev (409 {error:"stale"} on drift, never a silent
+# clobber), (4) atomic (temp file in the SAME dir + os.replace), preserving every OTHER key / line /
+# comment / order in the file.
+# --------------------------------------------------------------------------------------------
+import os as _os
+import tempfile as _tempfile
+
+# project name -> filename component. Must be a bare token: starts alnum, then alnum/._-, <=64 chars.
+# No '/', so f"plan.{project}.jsonl" can never escape data_root (path-traversal guard).
+SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+# The COMPLETE set of writes an edit may make. kind -> (target file template, allowed fields, how to
+# locate the row). Anything not here is rejected 400 — this dict IS the security boundary.
+#   locate="id"    : match the JSONL object whose "id"   == body.id   (decision)
+#   locate="term"  : match the JSONL object whose "term" == body.id   (glossary)
+#   locate="line"  : match by stable_line_id(kind, obj) == body.id    (surprise, focus)
+#   locate="whole" : no row; body.value overwrites the whole .txt     (goal, purpose)
+EDIT_SPEC = {
+    "decision": {"file": "plan.{p}.jsonl",      "fields": ("decision", "choice", "why", "status"),           "locate": "id"},
+    "surprise": {"file": "surprises.{p}.jsonl", "fields": ("headline", "detail", "valence", "direction"),    "locate": "line"},
+    "focus":    {"file": "focus.{p}.jsonl",     "fields": ("title", "trying", "next", "status"),              "locate": "line"},
+    "glossary": {"file": "glossary.{p}.jsonl",  "fields": ("term", "plain", "why"),                           "locate": "term"},
+    "goal":     {"file": "goal.{p}.txt",        "fields": (),                                                 "locate": "whole"},
+    "purpose":  {"file": "purpose.{p}.txt",     "fields": (),                                                 "locate": "whole"},
+}
+
+
+def stable_line_id(kind, obj):
+    """Deterministic id for a surprises/focus row. THE FRONTEND (viz.py) MUST COMPUTE THIS
+    IDENTICALLY — copy this body verbatim so the id in data-e-id matches what the backend recomputes.
+    Contract:
+        if the row already carries a non-empty "id" (focus rows do) -> that id wins, unchanged;
+        else  id = kind[0] + "-" + sha1( kind + ":" + canon ).hexdigest()[:12]
+        where canon = json.dumps({k: v for k, v in obj.items() if k != "id"},
+                                 sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    Both sides parse the SAME jsonl line into the SAME dict, so sort_keys makes key order irrelevant
+    and the hashes agree. On the FIRST successful edit the backend PERSISTS this id into the row
+    ("id": <this>), so it stays stable forever after even though the edit just changed the hashed
+    content (subsequent renders read the persisted "id" and skip the hash)."""
+    if obj.get("id"):
+        return str(obj["id"])
+    canon = json.dumps({k: v for k, v in obj.items() if k != "id"},
+                       sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return kind[:1] + "-" + hashlib.sha1((kind + ":" + canon).encode("utf-8")).hexdigest()[:12]
+
+
+def _norm(x):
+    return ("" if x is None else str(x)).strip()
+
+
+def _atomic_write(path, text):
+    """Write text to path atomically: a temp file in the SAME directory (so os.replace is a rename on
+    one filesystem, never a cross-device copy that could half-write), then os.replace over target."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = _tempfile.mkstemp(dir=str(path.parent), prefix=".tl-edit-", suffix=path.suffix or ".tmp")
+    try:
+        with _os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        _os.replace(tmp, path)
+    except Exception:
+        try:
+            _os.unlink(tmp)
+        except Exception:
+            pass
+        raise
+
+
+def _rewrite_jsonl_field(path, match_fn, field, value, prev, persist_id=None):
+    """Locate the ONE json row where match_fn(obj) is True, optimistic-check obj[field]==prev, set
+    obj[field]=value (and obj["id"]=persist_id when given, to pin a hashed line id), then rewrite ONLY
+    that physical line — every other line (comments, blanks, other rows) is kept byte-for-byte, and
+    the target row keeps all its other keys and their order. Returns (code, payload)."""
+    raw = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = raw.split("\n")
+    idx, obj = None, None
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        try:
+            o = json.loads(s)
+        except Exception:
+            continue
+        if isinstance(o, dict) and match_fn(o):
+            idx, obj = i, o
+            break
+    if obj is None:
+        return 404, {"error": "not found"}
+    if _norm(obj.get(field)) != _norm(prev):
+        return 409, {"error": "stale", "current": obj.get(field, "")}
+    obj[field] = value
+    if persist_id is not None:
+        obj["id"] = persist_id
+    lines[idx] = json.dumps(obj, ensure_ascii=False)
+    _atomic_write(path, "\n".join(lines))
+    return 200, {"ok": True, "value": value}
+
+
+def _write_whole(path, value, prev):
+    """goal / purpose: overwrite the whole .txt (optimistic-checked on the stripped current text)."""
+    cur = path.read_text(encoding="utf-8") if path.exists() else ""
+    if _norm(cur) != _norm(prev):
+        return 409, {"error": "stale", "current": cur.strip()}
+    _atomic_write(path, value.rstrip("\n") + "\n")
+    return 200, {"ok": True, "value": value}
+
+
+def apply_edit(body):
+    """Whitelisted write dispatcher for POST /edit. Returns (http_code, json_payload):
+    400 on any project/kind/field/value not on the whitelist, 404 if the item id isn't found, 409 on
+    optimistic-lock drift (body.prev != stored), 200 {ok:true, value:<stored>} on success."""
+    project = body.get("project", "")
+    if not isinstance(project, str) or not SAFE_NAME.match(project):
+        return 400, {"error": "bad project"}
+    spec = EDIT_SPEC.get(body.get("kind", ""))
+    if not spec:
+        return 400, {"error": "bad kind"}
+    value, prev = body.get("value", ""), body.get("prev", "")
+    if not isinstance(value, str) or not isinstance(prev, str):
+        return 400, {"error": "bad value/prev"}
+    path = paths.resolve(spec["file"].format(p=project))
+    locate = spec["locate"]
+    if locate == "whole":                       # goal / purpose — whole-file overwrite, no field/id
+        return _write_whole(path, value, prev)
+    field = body.get("field", "")
+    if field not in spec["fields"]:
+        return 400, {"error": "bad field"}
+    item_id = str(body.get("id", ""))
+    if locate == "id":                          # decision — match the row whose "id" == body.id
+        return _rewrite_jsonl_field(path, lambda o: str(o.get("id", "")) == item_id, field, value, prev)
+    if locate == "term":                        # glossary — match the row whose "term" == body.id
+        return _rewrite_jsonl_field(path, lambda o: str(o.get("term", "")) == item_id, field, value, prev)
+    # locate == "line": surprise / focus — match by the deterministic stable_line_id, and PIN it so a
+    # content-hashed id never drifts after this edit changes the hashed content.
+    return _rewrite_jsonl_field(path, lambda o: stable_line_id(body["kind"], o) == item_id,
+                                field, value, prev, persist_id=item_id)
+
+
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -221,6 +366,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("content-type", "text/html; charset=utf-8")
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_json(self, code, obj):
+        out = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(out)
 
     def do_GET(self):
         if self.path.startswith("/invite"):  # one-click magic link: /invite?c=<code>
@@ -267,6 +419,17 @@ class Handler(SimpleHTTPRequestHandler):
         if not user:
             self.send_error(403)
             return
+        # In-report edit — trust the relay (the worker already enforced owner-only) exactly like /chat.
+        # Accept the flat /edit and the namespaced /<email>/edit the worker may relay.
+        if path == "/edit" or re.match(r"^/[^/]+/edit$", path):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
+                if not self._allowed(user, body.get("project", "")):
+                    return self._send_json(403, {"error": "editing is owner-only"})
+                code, payload = apply_edit(body)
+                return self._send_json(code, payload)
+            except Exception as e:
+                return self._send_json(400, {"error": str(e)[:300]})
         if path != "/chat":
             self.send_error(404)
             return

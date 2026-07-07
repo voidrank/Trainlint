@@ -87,6 +87,41 @@ def _ec(s):
     return out
 
 
+def stable_line_id(kind, obj):
+    """Deterministic id for a surprises/focus jsonl ROW. MUST stay byte-identical to
+    chat_backend.stable_line_id (copied verbatim) so the id baked into data-e-id matches the id the
+    /edit backend recomputes to locate the line. Contract:
+        if the row already carries a non-empty "id" (focus rows do, and the backend PINS one into a
+            surprise row on its first edit) -> that id wins, unchanged;
+        else id = kind[0] + "-" + sha1( kind + ":" + canon ).hexdigest()[:12]
+        where canon = json.dumps({k: v for k, v in obj.items() if k != "id"},
+                                 sort_keys=True, ensure_ascii=False, separators=(",", ":")).
+    Both sides parse the SAME jsonl line into the SAME dict, so sort_keys makes key order irrelevant
+    and the hashes agree; once the backend pins an id both sides read it and the id stays stable even
+    though the edit changed the hashed content."""
+    if obj.get("id"):
+        return str(obj["id"])
+    canon = json.dumps({k: v for k, v in obj.items() if k != "id"},
+                       sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return kind[:1] + "-" + hashlib.sha1((kind + ":" + canon).encode("utf-8")).hexdigest()[:12]
+
+
+def _eattr(kind, field, prev, id="", type="", opts="", render=""):
+    """The data-e-* hooks the inline editor (EDIT_JS) reads off an editable element. kind/id/field
+    name the substrate target; data-e-prev is the RAW stored value — the optimistic-concurrency
+    `prev` the backend checks — kept independent of any glossary/markdown decoration in the visible
+    text. type='select' + opts drive a dropdown; render='glyph' re-paints a status glyph on save."""
+    a = (f' data-e-kind="{_e(kind)}" data-e-field="{_e(field)}"'
+         f' data-e-id="{_e(id)}" data-e-prev="{_e(prev)}"')
+    if type:
+        a += f' data-e-type="{_e(type)}"'
+    if opts:
+        a += f' data-e-opts="{_e(opts)}"'
+    if render:
+        a += f' data-e-render="{_e(render)}"'
+    return a
+
+
 def _natkey(s):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", str(s))]
 
@@ -847,6 +882,147 @@ mark.tl-hl{background:#fde68a;color:#1f2937;border-bottom:2px solid #f59e0b;bord
 @media print{.ann-btn,.ann-pop{display:none}}
 """
 
+# --- in-report INLINE EDITOR: CSS + JS -----------------------------------------------
+# Owner-only editing of every structured item straight in the live report. A toolbar toggle
+# arms "edit mode" (off by default); each editable element then shows a ✎ pencil affordance and,
+# on click, an inline textarea/select with Save/Cancel. Save POSTs to `edit` (relative, so the
+# worker relays it to this operator's backend exactly like `chat`); on 200 the DOM updates in
+# place, on 403 the report drops to read-only (someone else's substrate), on 409 it warns the
+# item changed underneath. Coexists with NAV/ANNOT/CHAT/QUIZ — it only intercepts clicks that
+# land on a [data-e-field] element while edit mode is on.
+EDIT_CSS = """
+.tl-editbtn.on{background:#0f172a!important;color:#fff!important;border-color:#0f172a!important}
+.tl-editbtn:disabled{opacity:.7;cursor:default}
+body.tl-editing [data-e-field]{cursor:pointer;border-radius:3px}
+body.tl-editing [data-e-field]:hover{background:#fef9c3;outline:1px dashed #fbbf24;outline-offset:1px}
+body.tl-editing [data-e-field]::after{content:'\\270e';font-size:10px;color:#b45309;margin-left:4px;opacity:.55;vertical-align:1px}
+.tl-edit{display:block;margin:6px 0;border:1px solid #c7d2fe;background:#f5f7ff;border-radius:9px;padding:8px 10px}
+.tl-edit textarea{display:block;width:100%;min-height:60px;border:1px solid #cbd5e1;border-radius:7px;padding:6px 8px;font:inherit;font-size:13px;line-height:1.45;resize:vertical;box-sizing:border-box}
+.tl-edit select{border:1px solid #cbd5e1;border-radius:7px;padding:5px 8px;font:inherit;font-size:13px;background:#fff}
+.tl-edit-row{display:flex;gap:7px;align-items:center;margin-top:7px}
+.tl-edit-row button{border:0;border-radius:7px;padding:5px 13px;font-weight:600;font-size:12.5px;cursor:pointer}
+.tl-edit-save{background:#4f46e5;color:#fff}
+.tl-edit-save:disabled{background:#a5b4fc}
+.tl-edit-cancel{background:#eef2f7;color:#334155}
+.tl-edit-msg{font-size:11.5px;margin-left:2px;color:#64748b}
+.tl-edit-msg.err{color:#b91c1c}
+.tl-edit-note{position:fixed;left:50%;transform:translateX(-50%);bottom:64px;z-index:100;
+  background:#7f1d1d;color:#fff;padding:7px 14px;border-radius:9px;font-size:12.5px;
+  box-shadow:0 6px 20px rgba(15,23,42,.3);max-width:88vw;text-align:center}
+.gl-why{color:#94a3b8;font-size:11px}
+@media print{.tl-editbtn,.tl-edit,.tl-edit-note{display:none}
+  body.tl-editing [data-e-field]::after{content:''}body.tl-editing [data-e-field]{background:none;outline:0}}
+"""
+
+# Plain string (own braces/backticks). Reads DATA.project from the shared <script id="tl-data">
+# blob (same source CHAT_JS/QUIZ_JS read). No hashing here — Python already baked data-e-id.
+EDIT_JS = r"""
+(function(){
+  var el=document.getElementById('tl-data'); var DATA={};
+  try{DATA=JSON.parse(el.textContent)}catch(e){}
+  var PROJECT=DATA.project||((document.title||'').split(' ')[0]);
+  var GLYPH={open:'○',decided:'◐',verified:'✓'};
+  var GCOL={open:'#64748b',decided:'#d97706',verified:'#16a34a'};
+  var editing=false, readonly=false, openEd=null, btn=null;
+
+  function toast(m){var t=document.createElement('div');t.className='tl-edit-note';t.textContent=m;
+    document.body.appendChild(t);setTimeout(function(){try{t.remove()}catch(e){}},4200);}
+
+  function closeEd(){ if(!openEd)return; var o=openEd; openEd=null;
+    o.el.style.display=o.disp; try{o.box.remove()}catch(e){} }
+
+  function setEditing(on){
+    editing=on&&!readonly;
+    document.body.classList.toggle('tl-editing',editing);
+    if(btn){btn.classList.toggle('on',editing);
+      btn.textContent=readonly?'✎ read-only':(editing?'✎ Editing — click an item':'✎ Edit');}
+    if(!editing) closeEd();
+  }
+
+  function build(elm){
+    closeEd();
+    var kind=elm.getAttribute('data-e-kind'), id=elm.getAttribute('data-e-id')||'',
+        field=elm.getAttribute('data-e-field')||'', prev=elm.getAttribute('data-e-prev')||'',
+        type=elm.getAttribute('data-e-type')||'text', oset=elm.getAttribute('data-e-opts')||'',
+        render=elm.getAttribute('data-e-render')||'';
+    var box=document.createElement('div'); box.className='tl-edit';
+    box.addEventListener('click',function(e){e.stopPropagation();});
+    box.addEventListener('mousedown',function(e){e.stopPropagation();});
+    var input;
+    if(type==='select'){
+      input=document.createElement('select');
+      oset.split(',').forEach(function(o){o=o.trim(); if(!o)return;
+        var op=document.createElement('option'); op.value=o; op.textContent=o;
+        if(o===prev)op.selected=true; input.appendChild(op);});
+    }else{ input=document.createElement('textarea'); input.value=prev; }
+    box.appendChild(input);
+    var row=document.createElement('div'); row.className='tl-edit-row';
+    var save=document.createElement('button'); save.type='button'; save.className='tl-edit-save'; save.textContent='Save';
+    var cancel=document.createElement('button'); cancel.type='button'; cancel.className='tl-edit-cancel'; cancel.textContent='Cancel';
+    var msg=document.createElement('span'); msg.className='tl-edit-msg';
+    row.appendChild(save); row.appendChild(cancel); row.appendChild(msg);
+    box.appendChild(row);
+    var disp=elm.style.display; elm.style.display='none';
+    elm.parentNode.insertBefore(box,elm.nextSibling);
+    openEd={el:elm,box:box,disp:disp};
+    try{input.focus();}catch(e){}
+    cancel.addEventListener('click',function(e){e.preventDefault();closeEd();});
+    input.addEventListener('keydown',function(e){
+      e.stopPropagation();
+      if(e.key==='Escape'){e.preventDefault();closeEd();}
+      else if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();save.click();}
+    });
+    save.addEventListener('click',function(e){
+      e.preventDefault();
+      var val=input.value;
+      save.disabled=true; msg.className='tl-edit-msg'; msg.textContent='saving…';
+      fetch('edit',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({project:PROJECT,kind:kind,id:id,field:field,value:val,prev:prev})})
+      .then(function(res){ return res.text().then(function(txt){
+        var j={}; try{j=JSON.parse(txt)}catch(e){}
+        if(res.status===200&&j&&j.ok){
+          var stored=(j.value!=null)?j.value:val;
+          if(render==='glyph'){elm.textContent=GLYPH[stored]||stored; if(GCOL[stored])elm.style.color=GCOL[stored];}
+          else{elm.textContent=stored;}
+          elm.setAttribute('data-e-prev',stored);
+          closeEd(); return;
+        }
+        save.disabled=false;
+        if(res.status===403){
+          msg.className='tl-edit-msg err'; msg.textContent='read-only';
+          readonly=true; setEditing(false); if(btn)btn.disabled=true;
+          closeEd(); toast('read-only — not your report');
+        }else if(res.status===409){
+          msg.className='tl-edit-msg err'; msg.textContent='changed underneath, reload';
+          toast('changed underneath — reload the report');
+        }else{
+          msg.className='tl-edit-msg err'; msg.textContent=(j&&j.error)||('error '+res.status);
+        }
+      });})
+      .catch(function(err){save.disabled=false; msg.className='tl-edit-msg err';
+        msg.textContent=String((err&&err.message)||err);});
+    });
+  }
+
+  // Capture-phase delegate: while armed, a click on any editable element opens its inline editor
+  // (and is stopped from toggling a <details> summary or triggering ANNOT/NAV/CHAT handlers).
+  document.addEventListener('click',function(e){
+    if(!editing||readonly) return;
+    if(openEd&&openEd.box.contains(e.target)) return;
+    var t=e.target&&e.target.closest?e.target.closest('[data-e-field]'):null;
+    if(!t) return;
+    e.preventDefault(); e.stopPropagation();
+    build(t);
+  },true);
+
+  var bar=document.querySelector('.tl-bar');
+  if(!bar){bar=document.createElement('div'); bar.className='tl-bar'; document.body.appendChild(bar);}
+  btn=document.createElement('button'); btn.type='button'; btn.className='tl-editbtn'; btn.textContent='✎ Edit';
+  btn.addEventListener('click',function(){ if(readonly)return; setEditing(!editing); });
+  bar.insertBefore(btn,bar.firstChild);
+})();
+"""
+
 ANNOT_JS = r"""
 (function(){
   var wrap=document.querySelector('.wrap'); if(!wrap||!window.getSelection) return;
@@ -1295,20 +1471,24 @@ def surprises_html(surprises):
         dirn = f" <span class='surp-dir'>{_e(s.get('direction'))}</span>" if s.get("direction") else ""
         _f = _e(f"SURPRISE ({val}) — {s.get('headline','')}: {s.get('detail','')}"
                 + (f"  [direction: {s.get('direction')}]" if s.get("direction") else ""))
+        sid = stable_line_id("surprise", s)  # matches chat_backend.stable_line_id exactly
         cards.append(
             f"<div class='surp surp-{_e(val)}'>"
             f"<div class='surp-h'><span class='surp-badge'>{badge}</span>{dirn}</div>"
-            f"<div class='surp-head'>{_ec(s.get('headline',''))}</div>"
-            f"<div class='surp-d'>{_ec(s.get('detail',''))}</div>"
+            f"<div class='surp-head'{_eattr('surprise', 'headline', s.get('headline',''), id=sid)}>"
+            f"{_ec(s.get('headline',''))}</div>"
+            f"<div class='surp-d'{_eattr('surprise', 'detail', s.get('detail',''), id=sid)}>"
+            f"{_ec(s.get('detail',''))}</div>"
             f"<div class='tl-chat' data-focus=\"{_f}\"></div></div>")
     return ("<div class='surprises'><div class='surp-title'>🎢 What surprised us — "
             "where reality broke from the plan</div>" + "".join(cards) + "</div>")
 
 
-def purpose_funnel_html(purpose, mt=None):
+def purpose_funnel_html(purpose, mt=None, edit_attrs=""):
     """The report's OPENING line — one plain sentence of why this exists (the whole point, big→small).
     Fed by purpose.<name>.txt; any 'LABEL:' prefixes are stripped and the lines joined into one lead.
-    Empty purpose -> nothing (the missing-purpose lint nags instead)."""
+    Empty purpose -> nothing (the missing-purpose lint nags instead). `edit_attrs` (data-e-* from
+    render_html) makes the lead the inline-editable purpose target."""
     if not purpose:
         return ""
     parts = []
@@ -1320,7 +1500,7 @@ def purpose_funnel_html(purpose, mt=None):
             line = line.split(":", 1)[1].strip()
         parts.append(line)
     lead = " ".join(parts).strip()
-    return f"<div class='lead'>{_ec(lead)}</div>" if lead else ""
+    return f"<div class='lead'{edit_attrs}>{_ec(lead)}</div>" if lead else ""
 
 
 def focus_section_html(name):
@@ -1344,14 +1524,21 @@ def focus_section_html(name):
     cards = []
     for it in items:
         st = str(it.get("status", "trying")).lower()
+        fid = stable_line_id("focus", it)  # matches chat_backend.stable_line_id (honors jsonl "id")
         dec = f"<span class='fdec'>{_e(it.get('decision',''))}</span>" if it.get("decision") else ""
-        nxt = f"<div class='fnext'><b>next:</b> {_ec(it.get('next',''))}</div>" if it.get("next") else ""
+        nxt = (f"<div class='fnext'><b>next:</b> "
+               f"<span{_eattr('focus', 'next', it.get('next',''), id=fid)}>{_ec(it.get('next',''))}</span></div>"
+               ) if it.get("next") else ""
         _f = _e(f"FOCUS ITEM [{st}] {it.get('title','')} — trying: {it.get('trying','')}; next: {it.get('next','')}")
         cards.append(
             f"<div class='fcard'>"
-            f"<div class='fhead'><span class='fst' style='background:{color.get(st,'#64748b')}'>{_e(st)}</span>"
-            f"<span class='ftitle'>{_ec(it.get('title',''))}</span>{dec}</div>"
-            f"<div class='ftry'>{_ec(it.get('trying',''))}</div>{nxt}"
+            f"<div class='fhead'><span class='fst' style='background:{color.get(st,'#64748b')}'"
+            f"{_eattr('focus', 'status', it.get('status','trying'), id=fid, type='select', opts='trying,blocked,done')}>"
+            f"{_e(st)}</span>"
+            f"<span class='ftitle'{_eattr('focus', 'title', it.get('title',''), id=fid)}>"
+            f"{_ec(it.get('title',''))}</span>{dec}</div>"
+            f"<div class='ftry'{_eattr('focus', 'trying', it.get('trying',''), id=fid)}>"
+            f"{_ec(it.get('trying',''))}</div>{nxt}"
             f"<div class='tl-chat' data-focus=\"{_f}\"></div></div>")
     return ("<div class='focussec'><div class='fshdr'>🎯 CURRENT FOCUS — what we're actively trying now</div>"
             + "".join(cards) + "</div>")
@@ -1574,7 +1761,12 @@ def glossary_html(glossary):
         if not t or t.lower() in seen or not g.get("plain"):
             continue
         seen.add(t.lower())
-        rows.append(f"<div class='gl-row'><b>{_e(t)}</b> — {_e(g['plain'])}</div>")
+        # id = the term (backend matches glossary.<name>.jsonl by term). plain + why are editable;
+        # the why span always renders (empty when unset) so edit mode can ADD a why.
+        rows.append(
+            f"<div class='gl-row'><b>{_e(t)}</b> — "
+            f"<span class='gl-plain'{_eattr('glossary', 'plain', g.get('plain',''), id=t)}>{_e(g.get('plain',''))}</span> "
+            f"<span class='gl-why'{_eattr('glossary', 'why', g.get('why',''), id=t)}>{_e(g.get('why',''))}</span></div>")
     if not rows:
         return ""
     return ("<details class='gl-box'><summary>Glossary — every term in plain words</summary>"
@@ -1633,7 +1825,7 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
 
     H = ['<!doctype html><html lang="en"><head><meta charset="utf-8">',
          '<meta name="viewport" content="width=device-width,initial-scale=1">',
-         f"<title>{_e(name)} — research tree</title><style>{CSS}{CHAT_CSS}{QUIZ_CSS}{ANNOT_CSS}</style></head><body><div class='wrap'>"]
+         f"<title>{_e(name)} — research tree</title><style>{CSS}{CHAT_CSS}{QUIZ_CSS}{ANNOT_CSS}{EDIT_CSS}</style></head><body><div class='wrap'>"]
 
     # ---- header / TLDR ----
     H.append("<div class='hdr'>")
@@ -1644,9 +1836,19 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
     if narrative:  # LLM wrote the prose — it replaces the templated lead+tldr+surprises+newly-done
         H.append(f"<div class='llm'>{_md2html(narrative)}</div>")
     else:
-        _lead = purpose_funnel_html(purpose, mt)  # one plain lead line: why we're doing this
+        # one plain lead line: why we're doing this. Editable: the purpose lead writes back to
+        # purpose.<name>.txt (prev = the RAW file text, whole-file overwrite); the goal fallback
+        # writes back to goal.<name>.txt (prev = the RAW file incl. its DONE/Pillars clauses).
+        _lead = purpose_funnel_html(purpose, mt, _eattr("purpose", "", purpose))
         if not _lead and goal:  # no purpose authored yet -> the GOAL is still the reader's anchor
-            _lead = f"<div class='lead'>{_ec(goal)}</div>"
+            _goal_raw = goal
+            try:
+                _gp = paths.resolve(f"goal.{name}.txt")
+                if _gp.exists():
+                    _goal_raw = _gp.read_text(encoding="utf-8").strip()
+            except Exception:
+                pass
+            _lead = f"<div class='lead'{_eattr('goal', '', _goal_raw)}>{_ec(goal)}</div>"
         H.append(_lead)
         if tldr:  # TL;DR — one bullet per line of tldr.<name>.txt
             _tl = [ln.strip().lstrip("-•* \t").strip() for ln in tldr.splitlines() if ln.strip()]
@@ -1793,17 +1995,23 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
                 ex_html = (f"<details class='draw' open><summary>examples ({len(ex)})</summary>"
                            f"<div class='dex'>{''.join(rows)}</div></details>")
             # the dense original decision text also folds away — open only if you want the full rationale
+            _did = n.get("id", "")
             choice_full = _gloss(_e(n.get("choice", "")), gmap)
             choice_fold = (f"<details class='draw'><summary>full decision text</summary>"
-                           f"<div class='dchfull'>{choice_full}</div></details>") if choice_full else ""
+                           f"<div class='dchfull'{_eattr('decision', 'choice', n.get('choice',''), id=_did)}>"
+                           f"{choice_full}</div></details>") if choice_full else ""
             # a decision that carries examples opens by default so its code blocks are visible on load
             dec_open = " open" if ex else ""
             spine.append(f"<details class='dec'{dec_open}><summary>"
-                         f"<span class='gl' style='color:{_c}'>{_g}</span>"
-                         f"<span class='dsum'><span class='dq'>{_gloss(_e(n.get('decision','')), gmap)}</span>{new_tag}{you}{pl_tag}"
+                         f"<span class='gl' style='color:{_c}'"
+                         f"{_eattr('decision', 'status', st, id=_did, type='select', opts='open,decided,verified', render='glyph')}>{_g}</span>"
+                         f"<span class='dsum'><span class='dq'"
+                         f"{_eattr('decision', 'decision', n.get('decision',''), id=_did)}>"
+                         f"{_gloss(_e(n.get('decision','')), gmap)}</span>{new_tag}{you}{pl_tag}"
                          f"<br><span class='dch'>{plain}</span></span></summary>"
                          f"<div class='dwhy'><span class='pr'>{_e(n.get('principle',''))}</span> "
-                         f"{_ec(n.get('why',''))}</div>"
+                         f"<span class='dwhyt'{_eattr('decision', 'why', n.get('why',''), id=_did)}>"
+                         f"{_ec(n.get('why',''))}</span></div>"
                          f"{ex_html}"
                          f"{choice_fold}"
                          f"<div class='tl-quiz' data-dec=\"{_e(n.get('id',''))}\"></div>"
@@ -1853,7 +2061,8 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
     H.append("<script>" + CHAT_JS + "</script>")
     H.append("<script>" + QUIZ_JS + "</script>")
     H.append("<script>" + NAV_JS + "</script>")
-    H.append("<script>" + ANNOT_JS + "</script>")  # last: it indexes the DOM the widgets built
+    H.append("<script>" + ANNOT_JS + "</script>")  # indexes the DOM the widgets built
+    H.append("<script>" + EDIT_JS + "</script>")   # last: arms the owner-only inline editor
     H.append("</body></html>")
     return "\n".join(H)
 
