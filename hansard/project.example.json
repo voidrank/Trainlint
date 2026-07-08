@@ -1,0 +1,31 @@
+{
+  "_comment": "PROJECT FACTS for the example project. The portable rules reference these via {{name}}. To port the harness to another project, copy this file to project.<name>.json, fill in the same keys with that project's facts, and bind it to your session with /hansard:use <name> (or env HARNESS_PROJECT). The rules never change; only this file does.",
+  "reference_impl": "the reference training repo",
+  "frozen_component": "the frozen audio tokenizer",
+  "good_storage": "/mnt/minio (full-flash)",
+  "bad_storage": "JFS/NAS",
+  "launch_re": "sbatch|torchrun|deepspeed |accelerate launch|python\\S*\\s[^|;&]*train",
+  "bad_storage_re": "/jfs/|/nas/",
+  "data_file_ext_re": "jsonl|json|npy|wav|tar|arrow|bin",
+  "locked_configs_re": "deepspeed.*\\.json|ds_config|zero[0-3].*\\.json|tokenizer_config\\.json|preprocessor_config\\.json|generation_config\\.json",
+  "preproc_trap_re": "MelSpectrogram\\(|mel_spectrogram\\(|MelScale\\(|melscale",
+  "preproc_ok_re": "power\\s*=\\s*1\\.0",
+  "preproc_example": "torchaudio mel omitting power -> defaults to 2.0 -> OOD spectrogram -> 1.79x worse; the correct value is power=1.0",
+  "pad_ood_re": "(audio|wav|sil\\w*|gap|pad)\\w*\\s*=\\s*np\\.zeros|np\\.zeros\\([^)]*\\)[^\\n]{0,40}(audio|wav|silence)",
+  "pad_ood_example": "pure zeros encode to OOD code 351 (~40% of training targets); natural quiet is 43; use -50dB noise instead",
+  "project_forward_re": "speech_mask|is_speech|role_emb|hidden_states_downcast|_local_forward",
+  "forward_example": "speech_mask over all positions; top_p bypassed by ban_silence; is_speech clearing self-feedback",
+  "target_dist_traps": "empty_loss_weight / speech_loss_weights / text_gt-vs-text",
+  "config_override_example": "DeepSpeed's WarmupDecayLR silently overrides sbatch's --lr_scheduler_type cosine",
+  "regime_example": "LoRA's 2e-5 carried to a full-FT backbone overfits",
+  "poison_example": "the text head poisoned by echo-loss, the timbre washed out by full-FT — both irreversible",
+  "demo_param": "enc_power (2.0/1.0 must match the ckpt's training)",
+  "code_align_example": "the sampler's 2nd arg is a ban-list, not a keep-list; don't pass is_causal=True to a manual KV-cache (Qwen2 hidden norm doubles)",
+  "codec_quirks": "(1) codes are context-dependent (after prior speech=43, pure zeros=351); (2) verify encoder causality (bidirectional -> future leak -> streaming breaks); (3) LM control tokens (1024/128) != codec-decodable codes; (4) multi-codebook joint accuracy decays exponentially, single-codebook top-1 must be >=70%",
+  "eval_region_example": "audio-reads-text looked like 62%, but the real speech region was only 12% (the 62% was the trivial 351-repeat silence score)",
+  "eval_crutch_example": "onset_floor forcing onset, force-feeding the text row, blanking history",
+  "eval_deploy_example": "bidirectional encoder over the full window inflates timing; offline continuous audio with text turns dropped != real duplex",
+  "codec_contract": {
+    "sample_rate": "24000"
+  }
+}

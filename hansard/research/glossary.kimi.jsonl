@@ -1,0 +1,6 @@
+{"term": "hook (Kimi)", "plain": "a shell command Kimi runs at a lifecycle moment; it gets the event JSON on stdin and can only ALLOW or BLOCK", "why": "hansard's whole doorman rides on hooks — but Kimi's are a gate, not a context channel"}
+{"term": "block-only", "plain": "Kimi acts on a hook ONLY via action=block (exit 2, or JSON permissionDecision:deny); it ignores any context the hook prints", "why": "this is the load-bearing constraint — coach/compass/escalate have no native path"}
+{"term": "permissionDecision:deny", "plain": "the JSON a hook prints to make Kimi refuse a tool call", "why": "the one output field Kimi parses (runner.py:78); hansard's reject channel"}
+{"term": "additionalContext", "plain": "on Claude/Codex, text a hook injects into the model silently without blocking", "why": "Kimi has NO equivalent — kimisoul.py reads only action+reason; this is what breaks the soft channels"}
+{"term": "Shell / WriteFile / StrReplaceFile", "plain": "Kimi's names for the bash / write-file / edit-file tools", "why": "the PreToolUse matcher and the tool-input shim target these instead of Claude's Bash/Write/Edit"}
+{"term": "skill (Kimi)", "plain": "a SKILL.md instruction file Kimi loads from extra_skill_dirs, callable as /skill:<name>", "why": "how the 5 hansard slash commands port (no native /command system)"}

@@ -1,0 +1,51 @@
+# Pipeline test fixtures. fields:
+#   desc | event (stdin JSON) | expect_channel (none|coach|escalate|deny) | expect_contains? [substrings in output JSON]
+#
+# --- stage 1 prefilter: drops ---
+{"desc": "read is dropped", "event": {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/x/model.py"}}, "expect_channel": "none"}
+{"desc": "readonly bash dropped", "event": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls -la /models/pretrained"}}, "expect_channel": "none"}
+{"desc": "doc edit dropped", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/NOTES.md", "content": "train the model"}}, "expect_channel": "none"}
+{"desc": "self-edit dropped", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/home/shiyil/Hansard/hansard/triggers.jsonl"}}, "expect_channel": "none"}
+{"desc": "harmless greeting dropped-ish", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "你好"}, "expect_channel": "none"}
+#
+# --- stage 2 coach (silent steer) ---
+{"desc": "vague train prompt -> coach", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "重新train吧"}, "expect_channel": "coach", "expect_contains": ["distribution"]}
+{"desc": "send a wav -> coach (demo rule)", "event": {"hook_event_name": "PreToolUse", "tool_name": "SendUserFile", "tool_input": {"files": ["/x/ex0_demo.wav"]}}, "expect_channel": "coach", "expect_contains": ["through the model"]}
+#
+# --- stage 3 reject (machine-certain, silent bounce) ---
+{"desc": "edit locked ds_config -> deny", "event": {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": "/mnt/minio/x/deepspeed_zero2.json", "new_string": "\"scheduler\": {}"}}, "expect_channel": "deny", "expect_contains": ["LOCKED"]}
+#
+# --- stage 3 escalate (human-verify the actual code) ---
+{"desc": "sbatch on jfs -> escalate (denylist is a human call, not machine-certain)", "event": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "sbatch --data_root /jfs/shiyil/codes train.sbatch"}}, "expect_channel": "escalate", "expect_contains": ["JFS", "minio"]}
+{"desc": "attention mask edit -> escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": "/x/duplex/model.py", "new_string": "attn = attention_mask * causal_mask"}}, "expect_channel": "escalate", "expect_contains": ["forward", "check"]}
+{"desc": "mel without power=1.0 -> escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/encode.py", "content": "m = MelSpectrogram(sample_rate=24000, n_mels=128)"}}, "expect_channel": "escalate", "expect_contains": ["power=1.0"]}
+{"desc": "mel WITH power=1.0 -> suppressed (codec coach only)", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/encode.py", "content": "m = MelSpectrogram(sample_rate=24000, power=1.0)"}}, "expect_channel": "coach", "expect_contains": ["codec"]}
+#
+# --- false-positive guards (must NOT over-fire) ---
+{"desc": "FP: grep a jfs path (read-only) -> none", "event": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "grep -n foo /jfs/x/logs.txt"}}, "expect_channel": "none"}
+{"desc": "FP: cat a jfs config (read-only) -> none", "event": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "cat /jfs/x/config.json"}}, "expect_channel": "none"}
+{"desc": "FP: launch on GOOD storage -> coach, not deny", "event": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "sbatch --data_root /mnt/minio/x train.sbatch"}}, "expect_channel": "coach"}
+#
+# --- real verifier beats whole-file regex: 2nd mel call missing power despite a power=1.0 elsewhere ---
+{"desc": "verifier: 2nd mel call missing power -> escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/enc.py", "content": "a=MelSpectrogram(sample_rate=24000)\nb=MelSpectrogram(sample_rate=16000, power=1.0)"}}, "expect_channel": "escalate", "expect_contains": ["mel"]}
+#
+# --- eval-validity rules ---
+{"desc": "ablation accuracy prompt -> coach (metric-by-region)", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "看下 ablation 的 accuracy 怎么样"}, "expect_channel": "coach", "expect_contains": ["MAJORITY"]}
+{"desc": "onset_floor mention -> coach (no-crutch)", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "用 onset_floor 跑一版看 turn-taking"}, "expect_channel": "coach", "expect_contains": ["crutch"]}
+{"desc": "frozen codec wrong sample_rate -> precise escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/encode.py", "content": "codes = dac.encode(wav, sample_rate=16000)"}}, "expect_channel": "escalate", "expect_contains": ["FROZEN-CODEC", "sample_rate=16000"]}
+{"desc": "frozen codec correct sample_rate -> no codec-mismatch escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/encode.py", "content": "codes = dac.encode(wav, sample_rate=24000)"}}, "expect_channel": "coach", "expect_not_contains": ["FROZEN-CODEC"]}
+{"desc": "forward FP: data sampler= (no model code) -> NOT escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/data_loader.py", "content": "sampler = RandomSampler(dataset)"}}, "expect_channel": "none"}
+{"desc": "loss FP: yaml mentions apply_text_loss -> NOT escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/mix.yaml", "content": "apply_text_loss: false\nsegment_size: 5"}}, "expect_channel": "none"}
+{"desc": "forward TP: real def forward + attention_mask -> escalate", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/model.py", "content": "def forward(self, x):\n    return self.attn(x, attention_mask=m)"}}, "expect_channel": "escalate", "expect_contains": ["forward / mask"]}
+#
+# --- shape-flow: agent derives the data->model->loss flow itself (coach, silent) ---
+{"desc": "shape-flow prompt: wiring data into a model -> coach", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "我要把新数据集对接到模型，验证每一层的output到loss"}, "expect_channel": "coach", "expect_contains": ["derive-the-shape-flow", "ALIGNMENT INVARIANT"]}
+{"desc": "prove-wiring prompt: smoke test before GPU -> coach", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "let me write a quick smoke test to verify the wiring before I launch on gpu"}, "expect_channel": "coach", "expect_contains": ["prove-the-wiring-on-cpu", "BEHAVIORAL probe"]}
+{"desc": "prove-wiring prompt CN: 冒烟跑通再上gpu -> coach", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "先在cpu上冒烟跑通这个forward和loss，再上gpu"}, "expect_channel": "coach", "expect_contains": ["prove-the-wiring-on-cpu"]}
+{"desc": "leakage prompt: dedup before splitting -> coach", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "how should I split train/val and dedup to avoid leakage across sets"}, "expect_channel": "coach", "expect_contains": ["no-leakage-across-splits", "FULL identity key"]}
+{"desc": "leakage prompt CN: 划分去重 -> coach", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "数据集怎么划分训练验证集，需要去重吗"}, "expect_channel": "coach", "expect_contains": ["no-leakage-across-splits"]}
+{"desc": "preproc-parity prompt: resize/normalize train vs infer -> coach", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "my resize and normalize differ between train and inference (serving skew)"}, "expect_channel": "coach", "expect_contains": ["train-infer-preprocessing-parity"]}
+{"desc": "eval-contamination prompt: MMLU benchmark -> coach", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "let me evaluate on the MMLU benchmark and report the score"}, "expect_channel": "coach", "expect_contains": ["eval-set-contamination"]}
+{"desc": "filler prompt: pad audio with np.zeros -> coach", "event": {"hook_event_name": "UserPromptSubmit", "prompt": "I'll pad the gaps with np.zeros silence before encoding"}, "expect_channel": "coach", "expect_contains": ["filler-is-not-neutral"]}
+{"desc": "shape-flow edit: model reshape+logits (no mask/loss) -> coach only", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/model.py", "content": "def forward(self, h):\n    h = h.transpose(1, 2)\n    logits = self.head(h)\n    return logits"}}, "expect_channel": "coach", "expect_contains": ["derive-the-shape-flow"]}
+{"desc": "shape-flow FP: a lone .view in a plain util -> none", "event": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/utils.py", "content": "x = t.view(-1)"}}, "expect_channel": "none"}

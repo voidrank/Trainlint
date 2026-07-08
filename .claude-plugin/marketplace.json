@@ -1,11 +1,14 @@
 {
-  "name": "trainlint",
-  "owner": { "name": "shiyil", "email": "voidrank@gmail.com" },
+  "name": "hansard",
+  "owner": {
+    "name": "shiyil",
+    "email": "voidrank@gmail.com"
+  },
   "plugins": [
     {
-      "name": "trainlint",
-      "source": "./trainlint",
-      "description": "Soft guardrail harness for AI/ML training: injects the right discipline into vague requests at the right moment, keeps you on the main thread, and maps where you've explored. Blocks only a machine-certain mistake or high-stakes work you haven't been quizzed on — always clearable, never locks you out."
+      "name": "hansard",
+      "source": "./hansard",
+      "description": "Hansard — the work, on the record. Plans a research project as decisions, drives the one that gates the rest, quizzes the operator, and publishes every close as a readable report (phone + web). Blocks only machine-certain mistakes or high-stakes work you haven't been quizzed on — always clearable."
     }
   ]
 }

@@ -15,3 +15,6 @@ sessions/
 wrangler.log
 *.log
 
+# local render artifacts — never in git
+hansard/research/decks/
+hansard/research/viz/

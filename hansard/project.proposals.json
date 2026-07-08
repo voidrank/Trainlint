@@ -1,0 +1,11 @@
+{
+  "_comment": "PROJECT FACTS for `proposals` — a META/tooling project: it changes hansard's OWN substrate + hooks, not an ML training run. Most ML danger-pattern keys (bad_storage, mel power, codec contract) do NOT apply and are intentionally omitted rather than faked. The keys below are the danger patterns RELEVANT to editing hansard itself.",
+  "reference_impl": "hansard's own research/ substrate (plan.py, viz.py, tree.py) + hooks/ layer (router.py, planaware.py)",
+  "frozen_component": "the existing on-disk substrate schema (plan.<name>.jsonl line shape, .active-project, goal/facts/glossary files) — must stay backward-readable",
+  "locked_configs_re": "plan\\.example\\.jsonl|project\\.example\\.json|facts\\.example\\.json|hooks\\.json",
+  "schema_break_re": "plan\\.py|tree\\.py|surfacer\\.py|planaware\\.py|router\\.py",
+  "schema_break_example": "changing the JSONL line shape read by plan.py:56 or the .active-project read at plan.py:41 without keeping old files readable -> every existing project (megafish/asr/kimi) silently breaks",
+  "preproc_trap_re": "",
+  "preproc_ok_re": "",
+  "codec_contract": {}
+}

@@ -1,0 +1,16 @@
+{
+  "name": "hansard",
+  "description": "Hansard — the work, on the record. A research harness where agent work leaves report-shaped context instead of chat logs: plan as decisions, drive the load-bearing one, quiz the operator, publish the record. A doorman between you and the coding agent: silent / coach / escalate / reject; never locks the session.",
+  "version": "0.4.0",
+  "keywords": [
+    "hooks",
+    "training",
+    "machine-learning",
+    "guardrail",
+    "linter"
+  ],
+  "author": {
+    "name": "shiyil",
+    "email": "voidrank@gmail.com"
+  }
+}
