@@ -159,13 +159,23 @@ def _used_askuserquestion(transcript_path, tail_lines=60):
 
 # A plain-text message that puts a CHOICE to the operator — should have been an AskUserQuestion
 # (multiple-choice pop-up) instead. Conservative: needs an option-solicitation pattern AND a '?'.
+# Two false-positive classes bit real sessions and are excluded by construction:
+#   • ①②③ used as ANSWER/section headers ("① 为什么…? <long answer> ② …") — a real option list
+#     puts its markers NEAR each other, so the marker branch requires an adjacent PAIR (≤80 chars).
+#   • solicit verbs inside a NEGATION ("没有需要你拍板的事", "免得…在等你选择") — matches with a
+#     negating prefix within 12 chars are discarded in _plaintext_decision_gap.
 _DECISION_SOLICIT = re.compile(
     r"要我[^。\n]{0,40}吗\s*[?？]"                 # 要我…吗？
     r"|二选一|三选一|你(来)?(选|定|拍板|决定)"       # 二选一 / 你选 / 你定 / 你拍板
     r"|哪(一)?(种|个|条)[^。\n]{0,20}[?？]"          # 哪种/哪个…？
-    r"|[①②③]|\b[Aa]\)\s|\b1\)\s.*\b2\)\s"          # ①②③ / A) / 1) … 2)
+    r"|[①②③][\s\S]{0,80}[①②③]"                    # an ADJACENT pair of circled markers
+    r"|\b[Aa]\)\s[\s\S]{0,80}\b[Bb]\)\s"            # A) … B) as a real option pair
+    r"|\b1\)\s[\s\S]{0,80}\b2\)\s"                  # 1) … 2) likewise
     r"|which (option|one|approach|do you)",
     re.I)
+
+# a solicit-verb hit is NOT a solicitation when it sits inside a negation/denial
+_SOLICIT_NEGATION = re.compile(r"(没有|不需要|无需|无须|不用|不必|免得|不是|并非|而不是)[^。\n？?]{0,12}$")
 
 
 def _plaintext_decision_gap(text, transcript_path):
@@ -173,7 +183,11 @@ def _plaintext_decision_gap(text, transcript_path):
     NOT use the AskUserQuestion tool — else None. Enforces: user decisions go as multiple-choice."""
     if len(text) < 120:
         return None
-    if not (("?" in text or "？" in text) and _DECISION_SOLICIT.search(text)):
+    if not ("?" in text or "？" in text):
+        return None
+    real_hit = any(not _SOLICIT_NEGATION.search(text[max(0, m.start() - 15):m.start()])
+                   for m in _DECISION_SOLICIT.finditer(text))
+    if not real_hit:
         return None
     if _used_askuserquestion(transcript_path):
         return None
