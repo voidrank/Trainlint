@@ -348,6 +348,133 @@ def apply_edit(body):
                                 field, value, prev, persist_id=item_id)
 
 
+# ---- "待处理 / To process" — adopt or dismiss a pending agent proposal --------------------------
+# The agentic digest leaves corrections/readability as PROPOSALS (it never auto-mutates substrate).
+# The report's 待处理 tab surfaces them with ✓采纳 / ✗忽略 buttons that POST here. ADOPT applies the
+# agent's STRUCTURED proposed_edits through the SAME EDIT_SPEC whitelist as /edit (an adopt can never
+# touch a file/field not on that whitelist), then marks the feedback row resolved. DISMISS just marks
+# it resolved. Owner-only, exactly like /edit (worker owner-gates it; loopback _auth/_allowed here).
+def _delete_jsonl_line(path, match_fn):
+    """Delete the ONE json row where match_fn(obj) is True; every other line kept byte-for-byte.
+    Atomic. Returns (code, payload)."""
+    raw = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = raw.split("\n")
+    idx = None
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        try:
+            o = json.loads(s)
+        except Exception:
+            continue
+        if isinstance(o, dict) and match_fn(o):
+            idx = i
+            break
+    if idx is None:
+        return 404, {"error": "not found"}
+    del lines[idx]
+    _atomic_write(path, "\n".join(lines))
+    return 200, {"ok": True, "deleted": True}
+
+
+def apply_proposed_edit(project, edit):
+    """Execute ONE structured proposed_edit from an agent, bounded EXACTLY by EDIT_SPEC (same
+    security boundary as /edit). Supported ops:
+      set          — {op:set, kind, field, match_field, match_value, value}  set a field on the row
+                     whose match_field==match_value (content match — no hashed id needed).
+      delete       — {op:delete, kind, match_field, match_value}             delete that row.
+      add_glossary — {op:add_glossary, term, plain, why}                     append a glossary entry.
+    Anything off the whitelist -> (False, reason). Returns (ok, message)."""
+    if not isinstance(edit, dict):
+        return False, "edit not an object"
+    op = str(edit.get("op") or "")
+    if op == "add_glossary":
+        term = str(edit.get("term") or "").strip()
+        plain = str(edit.get("plain") or "").strip()
+        if not term or not plain:
+            return False, "add_glossary needs term+plain"
+        gp = paths.resolve(f"glossary.{project}.jsonl")
+        have = {str(e.get("term") or "").lower() for e in _jl(f"glossary.{project}.jsonl")}
+        if term.lower() in have:
+            return True, f"glossary term '{term}' already present"
+        with gp.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"term": term, "plain": plain, "why": str(edit.get("why") or "").strip()},
+                               ensure_ascii=False) + "\n")
+        return True, f"added glossary term '{term}'"
+    kind = str(edit.get("kind") or "")
+    spec = EDIT_SPEC.get(kind)
+    if not spec or spec["locate"] == "whole":
+        return False, f"kind '{kind}' not adoptable"
+    mfield = str(edit.get("match_field") or "")
+    mval = _norm(edit.get("match_value"))
+    if mfield not in spec["fields"] or not mval:
+        return False, "match_field must be a whitelisted field with a value"
+    path = paths.resolve(spec["file"].format(p=project))
+    match = lambda o: _norm(o.get(mfield)) == mval  # noqa: E731
+    if op == "delete":
+        code, _ = _delete_jsonl_line(path, match)
+        return (code == 200), ("deleted the matched row" if code == 200 else "row not found")
+    if op == "set":
+        field = str(edit.get("field") or "")
+        if field not in spec["fields"]:
+            return False, "set.field not whitelisted"
+        code, _ = _rewrite_jsonl_field(path, match, field, str(edit.get("value") or ""),
+                                       _norm(next((o.get(field) for o in _jl(spec["file"].format(p=project))
+                                                   if _norm(o.get(mfield)) == mval), "")))
+        return (code == 200), ("set the field" if code == 200 else "row not found")
+    return False, f"unknown op '{op}'"
+
+
+def resolve_feedback(project, key, action):
+    """Adopt or dismiss a pending feedback row. ADOPT applies its proposed_edits (whitelist-bounded)
+    then marks it resolved; DISMISS just marks it resolved. Rewrites ONLY the matched row in
+    feedback.<project>.jsonl (line-preserving). Returns (code, payload)."""
+    if not SAFE_NAME.match(project or ""):
+        return 400, {"error": "bad project"}
+    if action not in ("adopt", "dismiss"):
+        return 400, {"error": "action must be adopt|dismiss"}
+    fp = paths.resolve(f"feedback.{project}.jsonl")
+    raw = fp.read_text(encoding="utf-8") if fp.exists() else ""
+    lines = raw.split("\n")
+    idx, row = None, None
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        try:
+            o = json.loads(s)
+        except Exception:
+            continue
+        if isinstance(o, dict) and str(o.get("key")) == str(key):
+            idx, row = i, o
+            break
+    if row is None:
+        return 404, {"error": "request not found"}
+    if row.get("resolved"):
+        return 200, {"ok": True, "already": True}
+    applied, msgs = 0, []
+    if action == "adopt":
+        for e in (row.get("proposed_edits") or []):
+            ok, m = apply_proposed_edit(project, e)
+            msgs.append(m)
+            if ok:
+                applied += 1
+        if not (row.get("proposed_edits")):
+            return 409, {"error": "no structured edit to adopt — re-run the digest or edit inline"}
+    row["resolved"] = True
+    row["resolution"] = ("adopted: " + "; ".join(msgs)) if action == "adopt" else "dismissed by operator"
+    row["resolved_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+    lines[idx] = json.dumps(row, ensure_ascii=False)
+    _atomic_write(fp, "\n".join(lines))
+    # re-render so the report reflects the change (report is a static artifact; regen or it's stale)
+    try:
+        viz.generate(project)
+    except Exception:
+        pass
+    return 200, {"ok": True, "action": action, "applied": applied, "detail": "; ".join(msgs)}
+
+
 # ---- "Deal with all requests" (the report drawer's digest button) ---------------------------
 # POST /digest spawns `viz.py <project> --digest` DETACHED and answers 202 immediately — the relay
 # caps a request at ~110s while a real digest (LLM classify + re-render + re-upload) takes minutes.
@@ -409,13 +536,36 @@ def start_digest(project):
         return 202, {"ok": True, "state": "running", "pid": p.pid}
 
 
+def start_board(project):
+    """Ensure the agent board's scheduler is running (idempotent): a LIVE scheduler holds it (checked
+    via agent_board.board_status' /proc-cmdline liveness, not a blind kill), else spawn
+    `agent_board.py run <project>` DETACHED. Same safe-spawn as start_digest (PATH fix +
+    start_new_session + single-flight under the shared _digest_lock). The caller creates the task
+    row BEFORE this; the scheduler picks up every queued row on the board."""
+    import agent_board as _ab
+    with _digest_lock:
+        st = _ab.board_status(project)
+        if st.get("state") == "running":
+            return 202, {"ok": True, "state": "running", "already": True}
+        env = dict(_os.environ)
+        lb = str(Path.home() / ".local" / "bin")
+        if lb not in env.get("PATH", "").split(":"):
+            env["PATH"] = lb + ":" + env.get("PATH", "/usr/local/bin:/usr/bin:/bin")
+        logp = paths.data_root() / ".agent_board.log"
+        args = [sys.executable, str(ROOT / "agent_board.py"), "run", project]
+        with open(logp, "wb") as log:
+            p = subprocess.Popen(args, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+                                 start_new_session=True, env=env, cwd=str(ROOT))
+        return 202, {"ok": True, "state": "running", "pid": p.pid}
+
+
 # Sensitive routes whose owner-only gate lives in the WORKER. Until the worker's trailing-slash
 # normalization ships, a request like /r/<victim>/edit/ slips past that gate and the worker relays
 # "/edit/" here — and we'd rstrip it back to "/edit" and perform a CROSS-TENANT write/spawn. Legit
 # callers NEVER send a trailing slash (the report JS uses fetch('edit'|'digest'|'digest/status')),
 # so reject any trailing slash on these routes as belt-and-suspenders (harmless once the worker is
 # patched: it then 403s the attack before it ever reaches us). Matches flat + ns-prefixed shapes.
-_TRAILING_GUARD = re.compile(r"^(?:/[^/]+)?/(?:edit|digest|digest/status)/+$")
+_TRAILING_GUARD = re.compile(r"^(?:/[^/]+)?/(?:edit|digest|digest/status|resolve|task/create|task/status)/+$")
 
 
 def _is_trailing_slash_attack(raw_path):
@@ -493,6 +643,18 @@ class Handler(SimpleHTTPRequestHandler):
             if user.get("projects") != "*" and (st.get("project") or "") not in (user.get("projects") or []):
                 st = {"state": st.get("state", "idle")}
             return self._send_json(200, st)
+        # agent board status poll (the 🎛 Agents tab). Project is explicit in ?project= and owner-scoped
+        # exactly like digest/status. JSON always, so the fetch caller never parses a login page.
+        if re.match(r"^(?:/[^/]+)?/task/status$", p0):
+            import agent_board as _ab
+            import urllib.parse as _up
+            user = self._auth()
+            if not user:
+                return self._send_json(403, {"error": "sign in"})
+            proj = _up.parse_qs(_up.urlparse(self.path).query).get("project", [""])[0]
+            if not self._allowed(user, proj):
+                return self._send_json(403, {"error": "not your project"})
+            return self._send_json(200, _ab.board_status(proj))
         user = self._auth()
         if not user:
             self._login_page()
@@ -547,6 +709,37 @@ class Handler(SimpleHTTPRequestHandler):
                 if not self._allowed(user, project):
                     return self._send_json(403, {"error": "digest is owner-only"})
                 code, payload = start_digest(project)
+                return self._send_json(code, payload)
+            except Exception as e:
+                return self._send_json(400, {"error": str(e)[:300]})
+        # 🎛 Agents tab — create a board task, then ensure the scheduler runs. Flat /task/create and
+        # the namespaced /<email>/task/create the worker may relay; owner-only like /digest (spends
+        # the operator's compute + writes local task files). The board is re-validated in create_task.
+        if path == "/task/create" or re.match(r"^/[^/]+/task/create$", path):
+            import agent_board as _ab
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
+                project = body.get("project") or ""
+                if not project or not SAFE_NAME.match(project):
+                    return self._send_json(400, {"error": "bad project"})
+                if not self._allowed(user, project):
+                    return self._send_json(403, {"error": "tasks are owner-only"})
+                task = _ab.create_task(project, body.get("title") or "", body.get("prompt") or "")
+                if not task:
+                    return self._send_json(400, {"error": "could not create task"})
+                code, payload = start_board(project)
+                payload["id"] = task["id"]
+                return self._send_json(code, payload)
+            except Exception as e:
+                return self._send_json(400, {"error": str(e)[:300]})
+        # 待处理 tab — adopt/dismiss a pending agent proposal. Flat /resolve + namespaced, like /edit.
+        if path == "/resolve" or re.match(r"^/[^/]+/resolve$", path):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
+                if not self._allowed(user, body.get("project", "")):
+                    return self._send_json(403, {"error": "resolving is owner-only"})
+                code, payload = resolve_feedback(body.get("project", ""), body.get("key", ""),
+                                                 body.get("action", ""))
                 return self._send_json(code, payload)
             except Exception as e:
                 return self._send_json(400, {"error": str(e)[:300]})

@@ -653,6 +653,17 @@ abbr.gl-term{text-decoration:underline dotted var(--mut);text-underline-offset:2
 .lb-diag{font-size:12px;color:var(--mut);margin-top:5px;line-height:1.5}
 .lb-vl{font-size:12px;font-weight:600;margin-top:5px;color:var(--ink2)}
 .lb-res{font-size:12px;color:var(--ink3);margin-top:4px}
+/* 🔧 To process tab — the actionable pending inbox */
+.tp-card{border:1px solid var(--line);border-left:3px solid var(--warn,#d97706);border-radius:10px;padding:11px 13px;margin-bottom:11px;background:var(--bg);transition:opacity .3s}
+.tp-card.tp-gone{opacity:.4}
+.tp-nedits{font-size:10.5px;font-weight:700;color:var(--warn,#b45309);text-transform:uppercase;letter-spacing:.04em}
+.tp-actions{display:flex;align-items:center;gap:8px;margin-top:9px}
+.tp-actions button{border:0;border-radius:8px;padding:5px 13px;font-size:12.5px;font-weight:600;cursor:pointer}
+.tp-actions button:disabled{opacity:.5;cursor:default}
+.tp-adopt{background:var(--ok,#16a34a);color:#fff}
+.tp-dismiss{background:var(--paper);color:var(--ink2);border:1px solid var(--line2)!important}
+.tp-msg{font-size:11.5px;color:var(--mut)}
+@media print{.tp-actions{display:none}}
 """
 
 
@@ -1952,6 +1963,130 @@ def glossary_html(glossary):
             + "".join(rows) + "</details>")
 
 
+# --- 🎛 AGENTS: the report as a multi-agent control plane ---------------------------------------
+# One Claude Code CLI agent per board TASK (agent_board.py). Slice 0 = read-only investigators:
+# a composer POSTs /task/create (owner-gated, spends the operator's compute), the scheduler runs
+# each as a headless `claude -p` (Read/Grep/Glob only), and every run leaves a full transcript.jsonl.
+# Cards are baked here at render time; the composer + live status poll are the only live pieces —
+# a static off-machine page manages LIVE agents exactly like the "Deal with all requests" button.
+AGENTS_CSS = """
+.ag-wrap{margin:6px 0}
+.ag-compose{display:flex;flex-direction:column;gap:7px;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+.ag-compose input,.ag-compose textarea{font:inherit;border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;box-sizing:border-box}
+.ag-compose textarea{min-height:60px;resize:vertical}
+.ag-run{align-self:flex-start;background:#0f172a;color:#fff;border:0;border-radius:8px;padding:7px 14px;font-weight:700;cursor:pointer}
+.ag-run:disabled{opacity:.5;cursor:default}
+.ag-msg{font-size:12px;color:#64748b}
+.ag-status{font-size:13px;color:#334155;margin:4px 2px 10px}
+.ag-card{border:1px solid var(--line);border-left:4px solid #94a3b8;border-radius:0 10px 10px 0;padding:10px 13px;margin:0 0 9px;background:#fff}
+.ag-done{border-left-color:#16a34a}.ag-running{border-left-color:#d97706}.ag-error{border-left-color:#dc2626}.ag-queued{border-left-color:#94a3b8}
+.ag-head{display:flex;align-items:center;gap:9px}
+.ag-badge{font-size:14px}
+.ag-title{font-weight:700;color:#0f172a;flex:1}
+.ag-state{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b}
+.ag-sum{font-size:13px;color:#334155;margin-top:6px;line-height:1.5}
+.ag-find{margin:6px 0 0 18px;font-size:12px;color:#475569}
+.ag-find li{margin:2px 0}
+.ag-prop{font-size:12.5px;color:#0f172a;margin-top:6px;background:#f1f5f9;border-radius:8px;padding:7px 10px}
+.ag-err{font-size:12.5px;color:#b91c1c;margin-top:6px}
+.ag-empty{color:#94a3b8;font-size:13px;padding:8px}
+"""
+
+AGENTS_JS = r"""
+(function(){
+  var wrap=document.querySelector('.ag-wrap'); if(!wrap) return;
+  var proj=wrap.getAttribute('data-project')||'';
+  var btn=wrap.querySelector('.ag-run'), msg=wrap.querySelector('.ag-msg'),
+      stat=wrap.querySelector('.ag-status'), board=wrap.querySelector('.ag-board'),
+      tin=wrap.querySelector('.ag-in-title'), pin=wrap.querySelector('.ag-in-prompt');
+  var polling=false;
+  function setCard(t){
+    var el=board.querySelector('[data-taskid="'+t.id+'"]');
+    if(!el){el=document.createElement('div');el.setAttribute('data-taskid',t.id);
+      el.innerHTML='<div class="ag-head"><span class="ag-badge"></span><span class="ag-title"></span><span class="ag-state"></span></div>';
+      board.insertBefore(el, board.firstChild);
+      var em=board.querySelector('.ag-empty'); if(em)em.remove();}
+    el.className='ag-card ag-'+t.state;
+    el.querySelector('.ag-badge').textContent={done:'✅',running:'⏳',error:'✗',queued:'•'}[t.state]||'•';
+    el.querySelector('.ag-title').textContent=t.title||t.id;
+    el.querySelector('.ag-state').textContent=t.state;
+  }
+  function poll(n){
+    if(!polling)return;
+    fetch('task/status?project='+encodeURIComponent(proj),{credentials:'same-origin'})
+      .then(function(r){if(r.status===403)throw new Error('owner-only — sign in as the owner');
+        if(r.status===503)throw new Error('operator offline — task queued, will run when your box is online');
+        return r.json()})
+      .then(function(j){
+        (j.tasks||[]).forEach(setCard);
+        var pending=(j.counts&&((j.counts.running||0)+(j.counts.queued||0)))||0;
+        if(j.state==='running'||pending>0){
+          stat.textContent='🤖 '+(j.done||0)+'/'+(j.total||0)+' agents done — investigating (read-only)…';
+          setTimeout(function(){poll(n+1)},5000);
+        }else{
+          polling=false;
+          stat.innerHTML='✅ all agents done. <a href="javascript:location.reload()">reload</a> to read their full findings.';
+        }
+      }).catch(function(e){polling=false;stat.textContent='✗ '+e.message});
+  }
+  btn.onclick=function(){
+    var title=(tin.value||'').trim(), prompt=(pin.value||'').trim();
+    if(!prompt){msg.textContent='describe what the agent should investigate first';return;}
+    btn.disabled=true;msg.textContent='';
+    fetch('task/create',{method:'POST',credentials:'same-origin',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({project:proj,title:title||prompt.slice(0,60),prompt:prompt})})
+      .then(function(r){if(r.status===403)throw new Error('owner-only — only the owner can spend agent compute');return r.json()})
+      .then(function(j){
+        btn.disabled=false;
+        if(j.error)throw new Error(j.error);
+        tin.value='';pin.value='';msg.textContent='queued '+(j.id||'');
+        if(!polling){polling=true;poll(0);}
+      }).catch(function(e){btn.disabled=false;msg.textContent='✗ '+e.message});
+  };
+  if(board.querySelector('.ag-running,.ag-queued')){polling=true;poll(0);}  // resume if a run is live
+})();
+"""
+
+
+def agents_section_html(name):
+    """🎛 Agents board — one Claude Code agent per task. Baked cards (state + findings) from
+    agent_board.load_tasks; the composer + live status poll (AGENTS_JS) are the only live pieces."""
+    try:
+        import agent_board as ab
+        tasks = ab.load_tasks(name)
+    except Exception:
+        tasks = []
+    cards = []
+    for t in reversed(tasks):  # newest first
+        stt = t.get("state", "queued")
+        oc = t.get("outcome") or {}
+        badge = {"done": "✅", "running": "⏳", "error": "✗", "queued": "•"}.get(stt, "•")
+        body = ""
+        if oc.get("summary"):
+            findings = "".join(f"<li>{_ec(str(f))}</li>" for f in (oc.get("findings") or [])[:8])
+            body = (f"<div class='ag-sum'>{_ec(str(oc.get('summary', '')))}</div>"
+                    + (f"<ul class='ag-find'>{findings}</ul>" if findings else "")
+                    + (f"<div class='ag-prop'><b>proposal:</b> {_ec(str(oc.get('proposal', '')))}</div>"
+                       if oc.get("proposal") else ""))
+        elif t.get("error"):
+            body = f"<div class='ag-err'>{_e(str(t['error']))}</div>"
+        cards.append(f"<div class='ag-card ag-{stt}' data-taskid='{_e(t.get('id', ''))}'>"
+                     f"<div class='ag-head'><span class='ag-badge'>{badge}</span>"
+                     f"<span class='ag-title'>{_e(t.get('title', ''))}</span>"
+                     f"<span class='ag-state'>{_e(stt)}</span></div>{body}</div>")
+    board = "".join(cards) or "<div class='ag-empty'>No agent tasks yet — describe one above and run a read-only agent.</div>"
+    return ("<h2 class='sec'>🎛 Agents — one read-only Claude Code agent per task</h2>"
+            f"<div class='ag-wrap' data-project='{_e(name)}'>"
+            "<div class='ag-compose'>"
+            "<input class='ag-in-title' placeholder='task title (e.g. audit the upload auth path)'>"
+            "<textarea class='ag-in-prompt' placeholder='what should the read-only agent investigate? it reads the real code + the report substrate, grounded in file:line, and returns findings + a proposal (it never edits).'></textarea>"
+            "<button class='ag-run' type='button'>▶ Run a read-only agent</button>"
+            "<span class='ag-msg'></span></div>"
+            "<div class='ag-status'></div>"
+            f"<div class='ag-board'>{board}</div></div>")
+
+
 def feedback_section_html(name):
     """🖍 Operator feedback — every note/question the reader left, digested into WHY it was
     left (confusion / correction / readability) plus the action each implies. The digest is
@@ -2060,6 +2195,102 @@ def logbook_section_html(name):
         return ""
 
 
+def toprocess_section_html(name):
+    """🔧 To process — the ACTIONABLE inbox: every request the digest left UNRESOLVED (a pending
+    correction/readability proposal, or a failed/unclassified agent). Each carries ✓ Adopt / ✗
+    Dismiss buttons (TOPROCESS_JS POSTs to the owner-only /resolve). Adopt applies the agent's
+    structured proposed_edits through the /edit whitelist; dismiss just clears it. The tab empties as
+    you process, so nothing falls through. Renders only when something is actually pending. Never
+    raises."""
+    try:
+        fb = [e for e in tree._load_jsonl(paths.resolve(f"feedback.{name}.jsonl"))
+              if isinstance(e, dict) and not e.get("resolved")]
+        if not fb:
+            return ""  # inbox zero -> no tab
+        col = {"confusion": "#a84a2f", "correction": "#b91c1c", "readability": "#92400e"}
+        out = ["<h2 class='sec'>🔧 To process — requests awaiting your call</h2>",
+               f"<p class='lb-intro'>{len(fb)} request(s) the agentic digest could not finish on its "
+               "own — it investigated and PROPOSED, but a substrate change or a human judgment is "
+               "yours to make. Adopt applies the agent’s exact proposal; dismiss clears it. Handled "
+               "requests move to the 📋 Logbook.</p>"]
+        for e in fb:
+            k = str(e.get("kind") or "unclassified")
+            key = str(e.get("key") or "")
+            pe = e.get("proposed_edits") or []
+            verdict = str(e.get("claim_verdict") or "")
+            vline = ""
+            if k == "correction" and verdict == "operator_right":
+                vline = "🤖 verified you were RIGHT — a fix is proposed"
+            elif k == "unclassified":
+                vline = "⚠ the agent could not produce a verdict — re-run the digest to retry"
+            prop = str(e.get("proposal") or "")
+            adopt_btn = (f"<button class='tp-adopt' data-key=\"{_eattr_val(key)}\">✓ Adopt</button>"
+                         if pe else "")
+            out.append(
+                "<div class='tp-card' data-key=\"" + _eattr_val(key) + "\">"
+                f"<div class='lb-head'><span class='fb-kind' style='background:{col.get(k, '#7d7566')}'>{_e(k)}</span>"
+                + (f"<span class='tp-nedits'>{len(pe)} proposed edit(s)</span>" if pe else "")
+                + "</div>"
+                f"<div class='lb-req'>“{_e(_trunc(str(e.get('quote') or ''), 120))}” — "
+                f"<b>{_ec(str(e.get('note') or ''))}</b></div>"
+                + (f"<div class='lb-diag'>{_ec(_trunc(str(e.get('insight') or ''), 400))}</div>" if e.get("insight") else "")
+                + (f"<div class='lb-vl'>{_e(vline)}</div>" if vline else "")
+                + (f"<details class='fb-wl'><summary>🤖 proposal / worklog</summary>"
+                   f"<pre>{_e(_trunc(prop, 1800))}</pre></details>" if prop else "")
+                + "<div class='tp-actions'>" + adopt_btn
+                + f"<button class='tp-dismiss' data-key=\"{_eattr_val(key)}\">✗ Dismiss</button>"
+                + "<span class='tp-msg'></span></div>"
+                + "</div>")
+        return "".join(out)
+    except Exception:
+        return ""
+
+
+def _eattr_val(s):
+    """Escape a value for a double-quoted HTML attribute (keys can carry | and spaces)."""
+    return str(s).replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;")
+
+
+# Wires the 🔧 To process tab's Adopt/Dismiss buttons to the owner-only /resolve backend route.
+# Relative fetch('resolve') rides whatever prefix the page is served under (same as chat/edit/digest).
+TOPROCESS_JS = r"""
+(function(){
+  var el=document.getElementById('tl-data'); if(!el) return;
+  var DATA={}; try{DATA=JSON.parse(el.textContent)}catch(e){return;}
+  function post(card,action,key){
+    var msg=card.querySelector('.tp-msg'); var btns=card.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++)btns[i].disabled=true;
+    if(msg)msg.textContent=(action==='adopt'?'applying…':'dismissing…');
+    fetch('resolve',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',
+      body:JSON.stringify({project:DATA.project,key:key,action:action})})
+      .then(function(r){return r.text().then(function(t){var j=null;try{j=JSON.parse(t)}catch(e){}
+        return {ok:r.ok,status:r.status,j:j};});})
+      .then(function(r){
+        if(r.status===403){if(msg)msg.textContent='owner-only — sign in as the report owner.';
+          for(var i=0;i<btns.length;i++)btns[i].disabled=false;return;}
+        if(!r.ok||!r.j||!r.j.ok){if(msg)msg.textContent='✗ '+((r.j&&r.j.error)||('error '+r.status));
+          for(var i=0;i<btns.length;i++)btns[i].disabled=false;return;}
+        card.classList.add('tp-gone');
+        if(msg)msg.textContent=(action==='adopt'?('✓ adopted'+(r.j.detail?' — '+r.j.detail:'')):'✗ dismissed')+
+          ' · report re-rendered, reload to see it';
+        setTimeout(function(){card.style.display='none';
+          if(!document.querySelectorAll('.tp-card:not(.tp-gone)').length){
+            var nb=document.querySelector('.rnav button[data-sec="sec-toprocess"]');
+            if(nb){nb.style.opacity=.5;nb.textContent='🔧 To process (0)';}
+          }},1400);
+      }).catch(function(e){if(msg)msg.textContent='✗ '+(e&&e.message?e.message:'network');
+        for(var i=0;i<btns.length;i++)btns[i].disabled=false;});
+  }
+  document.addEventListener('click',function(ev){
+    var t=ev.target; if(!t||!t.getAttribute)return;
+    var card=t.closest?t.closest('.tp-card'):null; if(!card)return;
+    if(t.classList.contains('tp-adopt'))post(card,'adopt',t.getAttribute('data-key'));
+    else if(t.classList.contains('tp-dismiss'))post(card,'dismiss',t.getAttribute('data-key'));
+  });
+})();
+"""
+
+
 def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_order,
                 glossary=None, clarify=None, motivation="", tldr="", surprises=None, purpose="",
                 narrative=""):
@@ -2077,7 +2308,7 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
 
     H = ['<!doctype html><html lang="en"><head><meta charset="utf-8">',
          '<meta name="viewport" content="width=device-width,initial-scale=1">',
-         f"<title>{_e(name)} — research tree</title><style>{CSS}{CHAT_CSS}{QUIZ_CSS}{ANNOT_CSS}{EDIT_CSS}</style>"
+         f"<title>{_e(name)} — research tree</title><style>{CSS}{CHAT_CSS}{QUIZ_CSS}{ANNOT_CSS}{EDIT_CSS}{AGENTS_CSS}</style>"
          # JS-STRIPPED viewers (phone inline preview, some sandboxes) never run NAV_JS, and the
          # tabbed sections default to display:none — without this fallback the whole report body
          # renders BLANK there. No JS -> hide the dead tab bar, lay every section out in flow
@@ -2401,7 +2632,9 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
         ("sec-flow", "🔀 Data &amp; pipeline", "".join(p for p in flow_sec if p)),
         ("sec-timeline", "📅 Timeline", "".join(tl_sec)),
         ("sec-decisions", "🧭 Decisions", "".join(dec_sec)),
-        ("sec-logbook", "📋 Logbook", logbook_section_html(name)),  # agentic-digest request handling
+        ("sec-agents", "🎛 Agents", agents_section_html(name)),
+        ("sec-toprocess", "🔧 To process", toprocess_section_html(name)),  # pending request inbox (adopt/dismiss)
+        ("sec-logbook", "📋 Logbook", logbook_section_html(name)),  # agentic-digest request handling record
     ) if h.strip()]
     if len(secs) > 1:
         H.append("<div class='rnav'>" + "".join(
@@ -2426,7 +2659,9 @@ def render_html(name, goal, bar, pl, nodes, knowledge, kinds, id2phase, phase_or
     H.append("<script>" + QUIZ_JS + "</script>")
     H.append("<script>" + NAV_JS + "</script>")
     H.append("<script>" + ANNOT_JS + "</script>")  # indexes the DOM the widgets built
+    H.append("<script>" + TOPROCESS_JS + "</script>")  # 🔧 To process tab adopt/dismiss buttons
     H.append("<script>" + EDIT_JS + "</script>")   # last: arms the owner-only inline editor
+    H.append("<script>" + AGENTS_JS + "</script>")  # 🎛 Agents board: composer + live status poll
     H.append("</body></html>")
     return "\n".join(H)
 
