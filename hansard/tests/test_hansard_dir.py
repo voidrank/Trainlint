@@ -62,6 +62,10 @@ check(w == home / ".hansard" / "log.projX.jsonl" and not old.exists()
 check(paths.wfile("plan.nosuch.jsonl") == _TMP / "plan.nosuch.jsonl",
       "unregistered project stays in the data dir")
 
+# 6b. board substrate never routes — agent_board reads data_root()/tasks.<board>.jsonl directly
+check(paths.wfile("tasks.projX.jsonl") == _TMP / "tasks.projX.jsonl",
+      "tasks.<board>.jsonl stays in the data dir (agent_board bypasses resolve)")
+
 # 7. 'example' never routes (excluded from the homes table)
 paths.wfile("project.example.json").write_text('{"_c":"e"}', encoding="utf-8")
 paths.set_project_home("example", str(home))

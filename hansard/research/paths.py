@@ -66,7 +66,10 @@ def data_root() -> Path:
 # _all_project_homes -> resolve -> _route -> homes).
 
 _PER_PROJECT_RE = re.compile(r"^([A-Za-z0-9_]+)\.([A-Za-z0-9_.-]+)\.(jsonl?|txt)$")
-_NO_ROUTE_KINDS = {"project"}
+# `project`: the registry stores `home` = routing's own input. `tasks`: agent_board.py reads
+# data_root()/tasks.<board>.jsonl DIRECTLY (the board is server substrate, not project memory) —
+# routing/migrating it would sever the agent board.
+_NO_ROUTE_KINDS = {"project", "tasks"}
 
 _HOMES_TTL = 15.0  # long-lived daemons (relay_agent) must notice a new registration eventually
 _homes_memo = {"t": 0.0, "v": {}}
