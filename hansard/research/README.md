@@ -69,7 +69,7 @@ mechanism (general, fixed)
 general, project-free
   principles.jsonl   the distilled, transferable LAWS (the refined layer) — no project nouns
 
-per-project facts (swap these to port — mechanism untouched)
+per-project facts — live IN the project at <home>/.hansard/ so git versions them with the code
   plan.<name>.jsonl       the ordered decisions (the spine)
   facts.<name>.json       thresholds / runs_glob / direction_regex / trunk_checks / candidate_moves
   knowledge.<name>.jsonl  papers/refs indexed by the PROBLEM they solve (+ wall match keywords)
@@ -78,6 +78,12 @@ per-project facts (swap these to port — mechanism untouched)
   log.<name>.jsonl        durable append-only annotations (git-committed)
   goal.<name>.txt         one-line goal + the "done" bar
 ```
+
+A project's memory routes to `<home>/.hansard/` once its `home` is stamped (registration does
+this); `project.<name>.json` (the registry holding `home`) plus session locks and server files
+stay in the global data dir. Reads fall back to the old flat data dir, and the first write
+moves the old copy in — `python3 paths.py migrate [project]` does it in bulk (deploy the new
+plugin code FIRST: old code doesn't know `.hansard/` and would stop seeing moved files).
 
 ## Inhaling an existing project (`/hansard:load`)
 

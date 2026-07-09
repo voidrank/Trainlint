@@ -229,6 +229,7 @@ hooks/router.py        orchestrator: merge three stages → land on a channel; f
 triggers.jsonl         coach rules: SECTION1 portable kernel / SECTION2 general principles + {{facts}}
 project.example.json   the example project's facts (fills {{placeholders}}); to switch projects, copy to project.<name>.json
 sessions/<id>.json     the per-session project lock (data_root); resolver order: env HARNESS_PROJECT / session lock / cwd's project home
+<home>/.hansard/       a project's memory (plan/goal/facts/knowledge/skills/glossary/log/….<name>.*) lives IN the project so git versions it; only the registry (project.<name>.json), session locks and server files stay in data_root [hansard-in-repo]
 tests/                 must run when adding rules; cases.jsonl is the behavior snapshot
 ```
 
