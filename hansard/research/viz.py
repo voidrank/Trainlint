@@ -1907,13 +1907,23 @@ def glossary_html(glossary):
 
 # --- 🎛 AGENTS: the report as a multi-agent control plane ---------------------------------------
 # One Claude Code CLI agent per board TASK (agent_board.py). Slice 0 = read-only investigators:
-# a composer POSTs /task/create (owner-gated, spends the operator's compute), the scheduler runs
-# each as a headless `claude -p` (Read/Grep/Glob only), and every run leaves a full transcript.jsonl.
-# Cards are baked here at render time; the composer + live status poll are the only live pieces —
-# a static off-machine page manages LIVE agents exactly like the "Deal with all requests" button.
+# /task/create is owner-gated (spends the operator's compute), the scheduler runs each as a
+# headless `claude -p` (Read/Grep/Glob only), and every run leaves a full transcript.jsonl.
+# The tab is an agent BROWSER with three client-side pages, switched by data-view on .ag-wrap:
+#   browser — every agent on the project as clickable cards (live ones sorted first) + counts
+#   detail  — one agent in full (prompt, findings, proposal, evidence, run dir), ← back
+#   new     — the composer as its own page (➕ New agent opens it)
+# All card detail is baked at render time; view switching, /task/create and the status poll
+# (AGENTS_JS) are the only live pieces — a static off-machine page manages LIVE agents exactly
+# like the "Deal with all requests" button.
 AGENTS_CSS = """
 .ag-wrap{margin:6px 0}
-.ag-compose{display:flex;flex-direction:column;gap:7px;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+.ag-bar{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.ag-count{font-size:13px;color:#334155;flex:1}
+.ag-new,.ag-back{background:#0f172a;color:#fff;border:0;border-radius:8px;padding:6px 13px;font-weight:700;cursor:pointer;font-size:13px}
+.ag-back{background:#fff;color:#0f172a;border:1px solid var(--line)}
+.ag-compose{display:none;flex-direction:column;gap:7px;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+.ag-compose-h{font-weight:700;font-size:13.5px;color:#0f172a}
 .ag-compose input,.ag-compose textarea{font:inherit;border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;box-sizing:border-box}
 .ag-compose textarea{min-height:60px;resize:vertical}
 .ag-run{align-self:flex-start;background:#0f172a;color:#fff;border:0;border-radius:8px;padding:7px 14px;font-weight:700;cursor:pointer}
@@ -1926,12 +1936,28 @@ AGENTS_CSS = """
 .ag-badge{font-size:14px}
 .ag-title{font-weight:700;color:#0f172a;flex:1}
 .ag-state{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b}
+.ag-peek{font-size:12.5px;color:#64748b;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ag-body{display:none}
 .ag-sum{font-size:13px;color:#334155;margin-top:6px;line-height:1.5}
 .ag-find{margin:6px 0 0 18px;font-size:12px;color:#475569}
 .ag-find li{margin:2px 0}
 .ag-prop{font-size:12.5px;color:#0f172a;margin-top:6px;background:#f1f5f9;border-radius:8px;padding:7px 10px}
+.ag-meta{font-size:12px;color:#64748b;margin-top:6px}
+.ag-meta code{font-size:11.5px;background:#f1f5f9;border-radius:4px;padding:1px 4px}
 .ag-err{font-size:12.5px;color:#b91c1c;margin-top:6px}
 .ag-empty{color:#94a3b8;font-size:13px;padding:8px}
+/* the tab's three client-side pages — data-view on .ag-wrap decides what shows */
+.ag-wrap[data-view='browser'] .ag-back{display:none}
+.ag-wrap[data-view='browser'] .ag-card{cursor:pointer}
+.ag-wrap[data-view='browser'] .ag-card:hover{background:#f8fafc}
+.ag-wrap[data-view='new'] .ag-compose{display:flex}
+.ag-wrap[data-view='new'] .ag-board,.ag-wrap[data-view='new'] .ag-count,
+.ag-wrap[data-view='new'] .ag-new,.ag-wrap[data-view='new'] .ag-status{display:none}
+.ag-wrap[data-view='detail'] .ag-card{display:none}
+.ag-wrap[data-view='detail'] .ag-card.open{display:block;cursor:default}
+.ag-wrap[data-view='detail'] .ag-card.open .ag-body{display:block}
+.ag-wrap[data-view='detail'] .ag-card.open .ag-peek{display:none}
+.ag-wrap[data-view='detail'] .ag-new,.ag-wrap[data-view='detail'] .ag-count{display:none}
 """
 
 AGENTS_JS = r"""
@@ -1942,13 +1968,31 @@ AGENTS_JS = r"""
       stat=wrap.querySelector('.ag-status'), board=wrap.querySelector('.ag-board'),
       tin=wrap.querySelector('.ag-in-title'), pin=wrap.querySelector('.ag-in-prompt');
   var polling=false;
+  // --- the tab's three pages: browser (all agents) / detail (one agent) / new (composer) ---
+  function setView(v){
+    wrap.setAttribute('data-view',v);
+    if(v!=='detail')board.querySelectorAll('.ag-card.open').forEach(function(c){c.classList.remove('open')});
+  }
+  function openDetail(card){
+    board.querySelectorAll('.ag-card.open').forEach(function(c){c.classList.remove('open')});
+    card.classList.add('open');setView('detail');
+  }
+  wrap.querySelector('.ag-new').onclick=function(){setView('new')};
+  wrap.querySelector('.ag-back').onclick=function(){setView('browser')};
+  board.addEventListener('click',function(e){
+    if(wrap.getAttribute('data-view')!=='browser')return;
+    var lnk=e.target.closest('.ag-new-link'); if(lnk){setView('new');return;}
+    var card=e.target.closest('.ag-card'); if(card)openDetail(card);
+  });
   function setCard(t){
     var el=board.querySelector('[data-taskid="'+t.id+'"]');
     if(!el){el=document.createElement('div');el.setAttribute('data-taskid',t.id);
-      el.innerHTML='<div class="ag-head"><span class="ag-badge"></span><span class="ag-title"></span><span class="ag-state"></span></div>';
+      el.innerHTML='<div class="ag-head"><span class="ag-badge"></span><span class="ag-title"></span><span class="ag-state"></span></div>'+
+        '<div class="ag-peek"></div><div class="ag-body"></div>';
       board.insertBefore(el, board.firstChild);
       var em=board.querySelector('.ag-empty'); if(em)em.remove();}
-    el.className='ag-card ag-'+t.state;
+    var open=el.classList.contains('open');
+    el.className='ag-card ag-'+t.state+(open?' open':'');
     el.querySelector('.ag-badge').textContent={done:'✅',running:'⏳',error:'✗',queued:'•'}[t.state]||'•';
     el.querySelector('.ag-title').textContent=t.title||t.id;
     el.querySelector('.ag-state').textContent=t.state;
@@ -1961,7 +2005,10 @@ AGENTS_JS = r"""
         return r.json()})
       .then(function(j){
         (j.tasks||[]).forEach(setCard);
-        var pending=(j.counts&&((j.counts.running||0)+(j.counts.queued||0)))||0;
+        var c=j.counts||{}, bits=[(j.total||0)+' agent'+((j.total||0)!==1?'s':'')];
+        ['running','queued','done','error'].forEach(function(s){if(c[s])bits.push(c[s]+' '+s)});
+        var cnt=wrap.querySelector('.ag-count'); if(cnt&&j.total)cnt.textContent=bits.join(' · ');
+        var pending=((c.running||0)+(c.queued||0))||0;
         if(j.state==='running'||pending>0){
           stat.textContent='🤖 '+(j.done||0)+'/'+(j.total||0)+' agents done — investigating (read-only)…';
           setTimeout(function(){poll(n+1)},5000);
@@ -1982,7 +2029,9 @@ AGENTS_JS = r"""
       .then(function(j){
         btn.disabled=false;
         if(j.error)throw new Error(j.error);
-        tin.value='';pin.value='';msg.textContent='queued '+(j.id||'');
+        if(j.id)setCard({id:j.id,title:tin.value||pin.value.slice(0,60),state:'queued'});
+        tin.value='';pin.value='';msg.textContent='';
+        setView('browser');  // back to the browser — the new agent's card is already there
         if(!polling){polling=true;poll(0);}
       }).catch(function(e){btn.disabled=false;msg.textContent='✗ '+e.message});
   };
@@ -1992,40 +2041,74 @@ AGENTS_JS = r"""
 
 
 def agents_section_html(name):
-    """🎛 Agents board — one Claude Code agent per task. Baked cards (state + findings) from
-    agent_board.load_tasks; the composer + live status poll (AGENTS_JS) are the only live pieces."""
+    """🎛 Agents tab as an agent BROWSER, two client-side pages inside one baked section:
+    the default `browser` view lists every agent on the project (live ones first) as clickable
+    cards — click one and the wrap switches to the `detail` view showing only that agent in
+    full (prompt, findings, proposal, evidence, run dir). ➕ New agent opens the `new` view
+    (the composer as its own page). All detail is baked at render time; AGENTS_JS only
+    switches views, creates tasks, and polls state."""
     try:
         import agent_board as ab
         tasks = ab.load_tasks(name)
     except Exception:
         tasks = []
+    live_first = {"running": 0, "queued": 1, "error": 2, "done": 3}
+    tasks = sorted(reversed(tasks),  # newest first, then agents still working float to the top
+                   key=lambda t: live_first.get(t.get("state", "queued"), 4))
+    counts = {}
     cards = []
-    for t in reversed(tasks):  # newest first
+    for t in tasks:
         stt = t.get("state", "queued")
+        counts[stt] = counts.get(stt, 0) + 1
         oc = t.get("outcome") or {}
         badge = {"done": "✅", "running": "⏳", "error": "✗", "queued": "•"}.get(stt, "•")
-        body = ""
+        peek = str(oc.get("summary") or t.get("error") or t.get("prompt") or "")
+        body = []
+        if t.get("prompt"):
+            body.append(f"<div class='ag-meta'><b>task:</b> {_ec(str(t['prompt']))}</div>")
         if oc.get("summary"):
+            body.append(f"<div class='ag-sum'>{_ec(str(oc['summary']))}</div>")
             findings = "".join(f"<li>{_ec(str(f))}</li>" for f in (oc.get("findings") or [])[:8])
-            body = (f"<div class='ag-sum'>{_ec(str(oc.get('summary', '')))}</div>"
-                    + (f"<ul class='ag-find'>{findings}</ul>" if findings else "")
-                    + (f"<div class='ag-prop'><b>proposal:</b> {_ec(str(oc.get('proposal', '')))}</div>"
-                       if oc.get("proposal") else ""))
+            if findings:
+                body.append(f"<ul class='ag-find'>{findings}</ul>")
+            if oc.get("proposal"):
+                body.append(f"<div class='ag-prop'><b>proposal:</b> {_ec(str(oc['proposal']))}</div>")
+            evid = "".join(f"<code>{_e(str(v))}</code> " for v in (oc.get("evidence") or [])[:10])
+            if evid:
+                body.append(f"<div class='ag-meta'><b>evidence:</b> {evid}</div>")
+            if oc.get("confidence"):
+                body.append(f"<div class='ag-meta'><b>confidence:</b> {_e(str(oc['confidence']))}</div>")
         elif t.get("error"):
-            body = f"<div class='ag-err'>{_e(str(t['error']))}</div>"
+            body.append(f"<div class='ag-err'>{_e(str(t['error']))}</div>")
+        if t.get("run_dir"):  # transcript.jsonl + outcome.json live here on the operator's box
+            body.append(f"<div class='ag-meta'><b>run dir:</b> <code>{_e(str(t['run_dir']))}</code></div>")
         cards.append(f"<div class='ag-card ag-{stt}' data-taskid='{_e(t.get('id', ''))}'>"
                      f"<div class='ag-head'><span class='ag-badge'>{badge}</span>"
                      f"<span class='ag-title'>{_e(t.get('title', ''))}</span>"
-                     f"<span class='ag-state'>{_e(stt)}</span></div>{body}</div>")
-    board = "".join(cards) or "<div class='ag-empty'>No agent tasks yet — describe one above and run a read-only agent.</div>"
-    return ("<h2 class='sec'>🎛 Agents — one read-only Claude Code agent per task</h2>"
-            f"<div class='ag-wrap' data-project='{_e(name)}'>"
+                     f"<span class='ag-state'>{_e(stt)}</span></div>"
+                     f"<div class='ag-peek'>{_e(peek)}</div>"
+                     f"<div class='ag-body'>{''.join(body)}</div></div>")
+    board = "".join(cards) or ("<div class='ag-empty'>No agents on this project yet — "
+                               "<a href='javascript:void(0)' class='ag-new-link'>open a new agent</a>.</div>")
+    n = len(tasks)
+    working = counts.get("running", 0) + counts.get("queued", 0)
+    count_bits = [f"{n} agent{'s' if n != 1 else ''}"] + [
+        f"{counts[s]} {s}" for s in ("running", "queued", "done", "error") if counts.get(s)]
+    return ("<h2 class='sec'>🎛 Agents — every agent working on this project</h2>"
+            f"<div class='ag-wrap' data-project='{_e(name)}' data-view='browser'>"
+            "<div class='ag-bar'>"
+            f"<span class='ag-count'>{_e(' · '.join(count_bits)) if n else ''}</span>"
+            "<button class='ag-back' type='button'>← All agents</button>"
+            "<button class='ag-new' type='button'>➕ New agent</button></div>"
             "<div class='ag-compose'>"
+            "<div class='ag-compose-h'>New agent — a read-only Claude Code agent picks up this task</div>"
             "<input class='ag-in-title' placeholder='task title (e.g. audit the upload auth path)'>"
-            "<textarea class='ag-in-prompt' placeholder='what should the read-only agent investigate? it reads the real code + the report substrate, grounded in file:line, and returns findings + a proposal (it never edits).'></textarea>"
-            "<button class='ag-run' type='button'>▶ Run a read-only agent</button>"
+            "<textarea class='ag-in-prompt' placeholder='what should the agent investigate? it reads the real code + the report substrate, grounded in file:line, and returns findings + a proposal (it never edits).'></textarea>"
+            "<button class='ag-run' type='button'>▶ Open the agent</button>"
             "<span class='ag-msg'></span></div>"
-            "<div class='ag-status'></div>"
+            "<div class='ag-status'>"
+            + (f"🤖 {working} agent(s) still working — states update live." if working else "")
+            + "</div>"
             f"<div class='ag-board'>{board}</div></div>")
 
 
