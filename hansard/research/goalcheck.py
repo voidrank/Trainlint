@@ -116,6 +116,42 @@ def mechanical_main_thread(name=None):
     return ""
 
 
+# spec-prose lint — the GOAL is the ONE human-facing north star, but agents (pressured to be
+# complete) inflate it into a bracket-annotated spec paragraph the operator can't read (the
+# 2026-07-10 "goal 我一个都看不懂" scar: goal.rename-hansard.txt grew to a 560-char English lead
+# with [decision-id] brackets). The contract (plan.md step 2): goal.txt = ONE plain sentence in the
+# operator's language + a plain `DONE =` line; decision ids, scope enumerations and file/regex
+# detail live in plan.<name>.jsonl (`plain`/`scope_drop`), never in the goal. Deterministic signals.
+_SPEC_BRACKET = re.compile(r"\[[a-z0-9][a-z0-9-]{2,}(?:\s[^\]]*)?\]")   # [decision-id] / [id note…]
+_SPEC_TECH = re.compile(r"\w+\.(?:py|md|json|jsonl|toml|yaml|sh)\b|\b[A-Z]{2,}[A-Z_]*_[A-Z_]+\b"
+                        r"|_re\b|\bregex\b")                            # file names / ENV_VARS / regexes
+
+
+def spec_prose(name=None):
+    """Warn when goal.<name>.txt reads as agent spec-prose instead of one plain sentence + DONE.
+    Returns a warning string or ''."""
+    if planlib is None:
+        return ""
+    name = planlib._active(name)
+    goal = _goal_text(name).strip()
+    if not goal:
+        return ""
+    lead = re.split(r"(?i)\bDONE\b", goal, 1)[0].strip()
+    signals = []
+    if _SPEC_BRACKET.search(goal):
+        signals.append("[decision-id] brackets")
+    if len(lead) > 400:
+        signals.append(f"lead runs ~{len(lead)} chars before DONE")
+    if _SPEC_TECH.search(goal):
+        signals.append("file/env/regex detail")
+    if not signals:
+        return ""
+    return ("⚠️ GOAL is SPEC-PROSE (" + ", ".join(signals) + "): the north star is a human-facing "
+            "surface — ONE plain sentence in the operator's language + a plain DONE line. Move "
+            "decision ids, scope enumerations and technical detail into plan decisions "
+            "(plain/scope_drop), then redraft goal.txt with kimi (human-facing prose is kimi's).")
+
+
 # big-picture / ownership lint — the project records WHAT it builds (goal) but not what it ULTIMATELY
 # serves (the end product, the downstream consumer, the owner). Heads-down producing a deliverable with
 # no articulated purpose is how work drifts from what actually matters, and how you optimize the wrong
@@ -191,11 +227,11 @@ def unaddressed_corrections(name=None):
 
 def brief(name=None):
     """Combined one-line goal warnings for the compass / report — MEANS-first framing, a MECHANICAL
-    main thread, a MISSING purpose, unaddressed operator CORRECTIONS, AND scope drift, each
-    self-labeled; '' when everything is clean."""
+    main thread, SPEC-PROSE goal text, a MISSING purpose, unaddressed operator CORRECTIONS, AND
+    scope drift, each self-labeled; '' when everything is clean."""
     parts = []
-    for w in (means_first(name), mechanical_main_thread(name), missing_purpose(name),
-              unaddressed_corrections(name)):
+    for w in (means_first(name), mechanical_main_thread(name), spec_prose(name),
+              missing_purpose(name), unaddressed_corrections(name)):
         if w:
             parts.append(w)
     ds = drift(name)

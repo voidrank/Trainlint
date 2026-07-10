@@ -77,9 +77,13 @@ Present this full picture to me FIRST and let me correct it.
    `project.<name>.json`, `research/facts.<name>.json`, and the ACTUAL code/configs they point to.
    If `$ARGUMENTS` is free text (e.g. "focus on the turn-based audio discussion"), let it steer you.
 2. Do the COMPLETE-CONTEXT exposition above. Show me, let me correct it. Then distill the project's
-   overall GOAL into ONE clear, concrete sentence and write it to `research/goal.<name>.txt` — this
-   is the north star the compass shows every turn; make it concrete (what we're building + the bar
-   for "done"), not a vague aspiration.
+   overall GOAL and write `research/goal.<name>.txt` as exactly TWO plain lines a non-engineer reads
+   at a glance — line 1: ONE plain sentence in the OPERATOR'S language (what we're making, for whom);
+   line 2: `DONE = ` the bar for done, equally plain. It is the north star the compass shows every
+   turn AND a human-facing surface: NO `[decision-id]` brackets, no scope enumerations, no
+   file/env/regex detail — that precision lives in the plan's decisions (`plain`, `scope_drop`,
+   anchors), never in the goal. Draft the wording with kimi (human-facing prose is kimi's);
+   goalcheck's spec-prose lint flags a goal that reads like a spec. Concrete, not a vague aspiration.
    As you define each term in the exposition, also record it to `research/glossary.<name>.jsonl` as
    `{term, plain, why}` — the project's living glossary the concept-gap quiz draws on (so a term the
    operator keeps asking about, e.g. DAC/s2/codec, can be drilled until it sticks).
