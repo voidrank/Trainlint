@@ -1,0 +1,7 @@
+# durable append-only annotation log (harvested from sessions). starts empty.
+{"ts": "2026-07-02", "kind": "build", "direction": "session-lock-store", "note": "Built+tested the per-session lock store in paths.py (read/write_session_lock -> data_root/sessions/<sid>.json); 9/9 incl. session isolation + path-injection safety."}
+{"ts": "2026-07-02", "kind": "build", "direction": "project-home-field", "note": "Added project `home` field: paths.project_home/set_project_home + new_project stamps home=cwd at registration; 7/7. Backfilled session-project-lock's home."}
+{"ts": "2026-07-02", "kind": "decide", "direction": "remove-global", "note": "Locked cutover order: backfill all homes + ship /use FIRST, keep .active-project as transitional fallback, remove global LAST (no silent-window)."}
+{"ts": "2026-07-02", "kind": "build", "direction": "migrate-existing-projects", "note": "Built /trainlint:use (use.py 9/9, binds via $CLAUDE_CODE_SESSION_ID) + backfilled asr_rewrite home. Also verifies switch-semantics (sticky+explicit)."}
+{"ts": "2026-07-02", "kind": "verify", "direction": "resolution-order", "note": "Rewired active_project() to session-lock -> cwd/home -> transitional global; test_resolution 9/9; live session resolves correctly via its lock. entry-point-rewiring = no-op (env-based)."}
+{"ts": "2026-07-02", "kind": "build", "direction": "remove-global", "note": "Removed the global .active-project: dropped the resolver fallback + both writers (new_project binds the session lock instead). session-project-lock complete."}

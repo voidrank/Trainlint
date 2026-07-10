@@ -1,0 +1,3 @@
+# papers/refs indexed by the PROBLEM they solve. one JSON object per line.
+# fields: id | title | problem | concepts[] | prereqs[] | match[] (wall keywords) | read(bool)
+{"title": "hook payload carries cwd + PreToolUse tool_input", "body": "Confirmed via official Claude Code hook docs: every hook event's stdin JSON includes cwd; PreToolUse also includes tool_name+tool_input. Source: code.claude.com/docs/en/hooks.md.", "tags": ["hooks", "cwd", "resolution"]}

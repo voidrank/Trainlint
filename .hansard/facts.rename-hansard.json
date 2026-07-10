@@ -1,0 +1,13 @@
+{
+  "_comment": "Research facts for rename-hansard. No training runs; the 'runs' are rename cuts landing on master.",
+  "thresholds": { "patience_P": 3, "window_K": 3, "flat_eps": 0.01 },
+  "runs_glob": "",
+  "direction_regex": "",
+  "trunk_checks": [
+    "grep-zero-orphan: every TRAINLINT_ read keeps a fallback after the env flip",
+    "substrate-diff: data_root file list identical before/after any move",
+    "cookie-probe: an OLD trainlint_token cookie still authenticates after the cloud cut",
+    "other-session-clean: git log shows their work merged, not orphaned"
+  ],
+  "candidate_moves": ["brand-strings-commit", "env-helper-shim", "repo-rename-dry-run", "boundary-table-signoff", "daemon-stop-mv-restart-script"]
+}

@@ -1,0 +1,11 @@
+Replace trainlint's single global .active-project pointer with a per-SESSION project lock derived
+from context, so the compass/doorman always reflect the project THIS session is actually working on.
+The three things it rests on: a per-session lock stored at data_root()/sessions/<session_id>.json keyed
+by session_id [session-lock-store]; each project records its own `home` directory, stamped at plan
+time, as the missing context->project link [project-home-field]; and active_project() resolves in order
+$HARNESS_PROJECT -> the session lock -> infer (cwd / touched file paths) x each project.home by
+longest-prefix (persisting the lock on a hit) -> "" silent [resolution-order]. Switching is sticky +
+explicit-only, and the old global pointer is removed entirely, not kept as a fallback.
+Bar for done: two concurrent sessions bind DIFFERENT projects without clobbering each other; a session
+working in project X's tree shows X (not whatever was last planned); no .active-project write remains in
+the codebase; and an unbound session stays silent rather than narrating a stale global.

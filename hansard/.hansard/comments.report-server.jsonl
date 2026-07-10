@@ -1,0 +1,1 @@
+{"id": "c-test-reanchor", "quote": "tenant-binding: One binding, both directions", "comment": "What exactly stops a malicious upload token from targeting another user's namespace? Explain the guarantee in one glossary term.", "sec": "sec-decisions", "ts": "2026-07-09T19:23:42Z"}

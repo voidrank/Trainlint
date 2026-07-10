@@ -1,0 +1,2 @@
+# papers/refs indexed by the PROBLEM they solve. one JSON object per line.
+# fields: id | title | problem | concepts[] | prereqs[] | match[] (wall keywords) | read(bool)

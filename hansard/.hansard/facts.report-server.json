@@ -1,0 +1,12 @@
+{
+  "_comment": "Research facts for report-server — /trainlint:plan fills runs_glob/direction_regex/candidate_moves from the real run layout. See research/facts.example.json.",
+  "thresholds": {
+    "patience_P": 3,
+    "window_K": 3,
+    "flat_eps": 0.01
+  },
+  "runs_glob": "",
+  "direction_regex": "",
+  "trunk_checks": [],
+  "candidate_moves": []
+}

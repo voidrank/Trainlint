@@ -1,0 +1,22 @@
+{
+  "_comment": "Research facts for session-project-lock. No training runs (tooling project), so runs_glob/direction_regex are empty by design -- the search-tree/lint degrades cleanly to no nodes. candidate_moves = remaining build steps; trunk_checks = cheapest tests that could invalidate the design.",
+  "thresholds": {
+    "patience_P": 3,
+    "window_K": 3,
+    "flat_eps": 0.01
+  },
+  "runs_glob": "",
+  "direction_regex": "",
+  "trunk_checks": [
+    "two concurrent sessions (different session_id) resolve to DIFFERENT projects, no clobber",
+    "a session whose cwd is inside project X's home resolves to X (not the last-planned project)",
+    "an unbound session with no cwd match resolves to '' and the compass stays silent",
+    "after remove-global: grep the tree -> no .active-project WRITE remains"
+  ],
+  "candidate_moves": [
+    "backfill home for every existing project (asr_rewrite/kimi/...) from its known code dir",
+    "ship /trainlint:use <name> to bind the current session to a project by name",
+    "rewire paths.active_project() to the session-lock -> cwd/home resolution order (transitional global fallback)",
+    "drop the global .active-project fallback + its writer (final remove-global cut)"
+  ]
+}

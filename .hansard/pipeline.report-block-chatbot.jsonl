@@ -1,0 +1,5 @@
+{"label": "Report blocks", "note": "viz.py renders DATA / FOCUS / pipeline / beats / decisions"}
+{"label": "tl-data blob", "note": "DATA.blocks[id] = {title, text} injected as <script id='tl-data'>"}
+{"label": "per-block widget", "note": "generalized tl-chat JS, data-block keyed"}
+{"label": "Anthropic API", "note": "browser fetch, key in localStorage, grounded in the block"}
+{"label": "answer + memory", "note": "grounded answer + per-block localStorage memory"}

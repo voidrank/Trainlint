@@ -1,0 +1,2 @@
+# hansard comment-agent sessions — one per comment, merged by key. See comment_agents.py.
+{"key": "c-test-reanchor|c388146a", "quote": "tenant-binding: One binding, both directions", "note": "What exactly stops a malicious upload token from targeting another user's namespace? Explain the guarantee in one glossary term.", "sid": "b5265fd2-15cd-4451-bd3b-0875caf43dc8", "state": "running", "passes": 0, "run_dir": "agent_runs/report-server/c-test-reanchor|c388146a/", "ts": 1783625037.623568}

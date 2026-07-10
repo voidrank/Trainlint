@@ -1,0 +1,6 @@
+{"label": "session render", "note": "any /plan or /execute close renders <name>.html into data_root/viz (local staging)"}
+{"label": "plugin upload", "note": "push.py POSTs report+slides to secondfoundationlabs.com/api/upload with the installer's token (opt-in, fail-silent)"}
+{"label": "Worker /api/upload", "note": "validates the signed token -> writes R2 key <namespace>/<project>.html"}
+{"label": "R2 store", "note": "one bucket, each tenant's reports under their own namespace prefix"}
+{"label": "browser login", "note": "installer opens the domain -> Cloudflare Access (Google/GitHub) -> identity to the Worker"}
+{"label": "Worker serve", "note": "GET / = the caller's index; GET /<project>.html = the caller's report from R2, scoped to their namespace"}

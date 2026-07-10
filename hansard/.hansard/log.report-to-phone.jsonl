@@ -1,0 +1,6 @@
+# durable append-only annotation log (harvested from sessions). starts empty.
+{"ts": "2026-07-02", "kind": "build", "direction": "send-html-not-png", "note": "Reworked report->phone: send the report HTML with display:'render' (renders inline in the app, operator-confirmed), deleted the PIL PNG card, reworked the delivery gate + command docs."}
+{"ts": "2026-07-02", "kind": "build", "direction": "which-html", "note": "viz PHONE sign-off now names BOTH the report .html and the slides .html as phone deliverables (operator: ship both); which-html built (artifact=viz.py)"}
+{"ts": "2026-07-02", "kind": "build", "direction": "delivery-gate-rework", "note": "reportcheck E2 now requires BOTH report.html + slides.html sends; _sent_report_html returns (report,slides); test_reportcheck 14/14"}
+{"ts": "2026-07-02", "kind": "build", "direction": "command-instructions", "note": "plan.md + execute-and-report.md instruct SendUserFile BOTH html files with display:'render'"}
+{"ts": "2026-07-02", "kind": "verify", "direction": "which-html", "note": "On-phone render test in a remote-control session: SendUserFile'd BOTH report.html + slides.html with display:'render'; operator confirmed the slides DECK renders inline as a clean paged deck. Both views now proven on-phone -> which-html verified, closing the last open residual."}

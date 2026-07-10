@@ -1,0 +1,7 @@
+# durable append-only annotation log (harvested from sessions). starts empty.
+{"ts": "2026-07-02", "kind": "build", "direction": "stable-render-dir", "note": "repointed viz render target to data_root/viz; all 5 projects aggregate into one stable folder (10 files, spot-checked valid)"}
+{"ts": "2026-07-02", "kind": "build", "direction": "worker-serve", "note": "scaffolded the Cloudflare Worker: auth.js (Access-JWT verify + HMAC upload-token mint/verify + sha256 namespace), index.js (upload/index/serve scoped to caller), wrangler.toml, README runbook. Not yet deployed."}
+{"ts": "2026-07-03", "kind": "decide", "direction": "access-login", "note": "operator confirmed Cloudflare Access (Google IdP + email allowlist) over roll-your-own OAuth; auth.js already implements the Access-JWT side, no code change"}
+{"ts": "2026-07-08", "kind": "verify", "direction": "verify-isolation", "note": "two-tenant live probe 8/8: same-named cross-upload stays namespaced, zero cross-reads; found+fixed urllib-UA 403 footgun"}
+{"ts": "2026-07-08", "kind": "decide", "direction": "access-login", "note": "operator chose OPEN registration (worker-native Google OAuth + magic-link, no allowlist); Access path superseded"}
+{"ts": "2026-07-08", "kind": "verify", "direction": "plugin-upload", "note": "live upload path confirmed: report+slides POST 200, auto-token minted, magic-link printed"}
