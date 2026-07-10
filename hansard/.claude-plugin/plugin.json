@@ -1,7 +1,7 @@
 {
   "name": "hansard",
   "description": "Hansard — the work, on the record. A research harness where agent work leaves report-shaped context instead of chat logs: plan as decisions, drive the load-bearing one, quiz the operator, publish the record. A doorman between you and the coding agent: silent / coach / escalate / reject; never locks the session.",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "keywords": [
     "hooks",
     "training",

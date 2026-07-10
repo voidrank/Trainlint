@@ -149,11 +149,18 @@ RETURN — your FINAL message must be ONLY this JSON (no prose, no code fence), 
   "diagnosis": "2-5 sentences: what you found and how you concluded, grounded",
   "change_summary": "ONE line naming the change you would apply (or why you refuse)",
   "glossary_add": [{{"term": "...", "plain": "one jargon-free sentence", "why": "why it matters HERE, with file:line"}}],
+  "proposed_edits": [{{"op": "delete|set|add_glossary", "kind": "decision|focus|glossary", "match_field": "<a whitelisted field>", "match_value": "<the EXACT current text of that field, so the backend finds the row>", "field": "<for op=set: which field to change>", "value": "<for op=set: the new text>", "term": "<for op=add_glossary>", "plain": "<for op=add_glossary>", "why": "<for op=add_glossary>"}}],
   "proposal": "the full concrete change (diff / wording / refusal+evidence), copy-pasteable",
   "evidence": ["file:line", "..."],
   "confidence": "high|medium|low"
 }}
 Only include glossary_add for genuine CONFUSION gaps (empty list otherwise). Keep proposal focused.
+proposed_edits = the MACHINE-APPLICABLE version of your proposal, so the operator can adopt it with one
+click. Emit it ONLY when you concretely recommend changing the substrate (e.g. a readability fix that
+rewrites a decision's text). Rules: match_value must be the EXACT current text of match_field so the
+backend locates the row; whitelisted fields only — decision: decision/choice/why/status, focus:
+title/trying/next/status, glossary: term/plain/why. NEVER emit proposed_edits when you refused
+(operator_wrong) or when no substrate change is warranted (leave it []).
 
 WHO READS WHAT — two audiences, two registers:
 - `change_summary` and `diagnosis` are shown to the OPERATOR on the report surface. Write them in
@@ -265,13 +272,19 @@ def _record_verdicts(project, results):
             recs.append(base)
             continue
         kind = o.get("kind") if o.get("kind") in ("confusion", "correction", "readability") else "unclassified"
+        # only keep well-formed structured edits (a malformed one must never reach the adopt path)
+        pe = [e for e in (o.get("proposed_edits") or []) if isinstance(e, dict) and e.get("op")]
         base.update({"kind": kind, "insight": o.get("diagnosis", "")[:500],
                      "action": o.get("change_summary", "")[:500],
                      "claim_verdict": o.get("claim_verdict", "na"),
                      "confidence": o.get("confidence", ""),
+                     "proposed_edits": pe[:8],
                      "proposal": (o.get("proposal", "") or "")[:2000]})
-        # confusion with an applied glossary term is resolved; corrections/readability stay pending
-        if kind == "confusion" and (o.get("glossary_add") or []):
+        # confusion with an applied glossary term is resolved; corrections/readability stay pending.
+        # BUT a confusion that ALSO proposes a substrate rewrite (set/delete) must stay pending —
+        # auto-resolving it orphans those edits (Adopt only exists on pending cards).
+        if (kind == "confusion" and (o.get("glossary_add") or [])
+                and not any(e.get("op") in ("set", "delete") for e in pe)):
             base.update({"resolved": True, "resolution": "auto-glossary (agentic)", "resolved_at": now})
         recs.append(base)
     p = feedback._feedback_path(project)
